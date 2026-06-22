@@ -1,0 +1,4 @@
+pytap2
+meshtastic[cli]
+
+feedparser
