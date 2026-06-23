@@ -57,21 +57,28 @@ def job():
 
         time.sleep(config["meshtastic"]["time_between_messages_s"])
 
-connect_mode = config["meshtastic"]["connect_mode"].lower()
-if connect_mode == "tcp":
-    mt = mt_lib.MtTcpHandler(host=config["meshtastic"]["host"])
-elif connect_mode == "serial":
-    mt = mt_lib.MtSerialHandler(port=config["meshtastic"]["port"])
-else:
-    raise TypeError("Érvényetelen connect_mode a config fájlban. TCP / serial")
 
 
-feeds = vesz_lib.BMFeeds(rss_url=config["vesz"]["rss_url"], postfix_text=config["vesz"]["postfix_text"])
+
 
 
 if __name__ == "__main__":
-    init()
+    connect_mode = config["meshtastic"]["connect_mode"].lower()
+    if connect_mode == "tcp":
+        mt = mt_lib.MtTcpHandler(host=config["meshtastic"]["host"])
+    elif connect_mode == "serial":
+        mt = mt_lib.MtSerialHandler(port=config["meshtastic"]["port"])
+    else:
+        raise TypeError("Érvényetelen connect_mode a config fájlban. TCP / serial")
 
+
+    feeds = vesz_lib.BMFeeds(rss_url=config["vesz"]["rss_url"], postfix_text=config["vesz"]["postfix_text"])
+
+
+
+    init()
+    job()
+    
     schedule.every(config["vesz"]["rss_read_time_min"]).minutes.do(job)
     
     while True:
