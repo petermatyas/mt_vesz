@@ -9,9 +9,12 @@ import schedule
 
 
 class BMFeeds():
-    def __init__(self, rss_url="https://www.katasztrofavedelem.hu/10466/RSS_VESZ", cache_file='cache.json'):
+    def __init__(self, rss_url="https://www.katasztrofavedelem.hu/10466/RSS_VESZ", 
+                 cache_file='cache.json',
+                 postfix_text="hírforrás: BM OKF"):
         self.url = rss_url
         self.cache_file = cache_file
+        self.postfix_text = postfix_text
         self.cache = self._load_cache()
         # Az utolsó frissítés idejét a legfrissebb cache elemhez igazítjuk
         self.last_updated_cache_time = self._get_max_timestamp()
@@ -85,11 +88,20 @@ class BMFeeds():
         news = list()
         for i in rawNews:
             text = i.title
-            text += " hírforrás: BM OKF"        
+            text += f" {self.postfix_text}"        
             news.append(text)
         return news
 
+if __name__ == "__main__":
+    
+    feeds = BMFeeds()
+    news = feeds.getNews()
 
+    if not news:
+        print("Töröld a cache.json-t!")
+        
+    for line in news:
+        print(line)
 
 
 

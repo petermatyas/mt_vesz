@@ -1,9 +1,16 @@
 import time
-
 import schedule
+import tomllib
 
 import mt_lib
 import vesz_lib
+
+
+
+with open("config.toml", "rb") as f:
+    config = tomllib.load(f)
+
+
 
 
 def init():
@@ -11,13 +18,14 @@ def init():
     így ez addig blokkol, amíg sikerül csatlakozni."""
     mt.connect()
     try:
-        mt.setChannel(edit_channel=1, new_settings={
-            'psk': 'AQ==',
-            'name': 'vesz_teszt',
-            'uplink_enabled': False,
-            'downlink_enabled': True,
-            'position_precision': 13
-        })
+        mt.setChannel(edit_channel=config["meshtastic"]["emergency_channel_number"], 
+                      new_settings={
+                        'psk': 'AQ==',
+                        'name': config["meshtastic"]["emergency_channel_name"],
+                        'uplink_enabled': False,
+                        'downlink_enabled': True,
+                        'position_precision': 13
+                    })
     except Exception as e:
         print(f"Csatorna beállítása sikertelen: {e}")
 
@@ -28,7 +36,6 @@ def init():
 
 
 def job():
-    print("I'm working...")
 
     try:
         news = feeds.getNews()
@@ -47,21 +54,26 @@ def job():
             print(f"Hír nem lett kézbesítve (nincs ACK): {e}")
         except Exception as e:
             print(f"Hír küldése sikertelen: {e}")
-        time.sleep(30)
-    print(news)
+
+        time.sleep(config["meshtastic"]["time_between_messages_s"])
+
+connect_mode = config["meshtastic"]["connect_mode"].lower()
+if connect_mode == "tcp":
+    mt = mt_lib.MtTcpHandler(host=config["meshtastic"]["host"])
+elif connect_mode == "serial":
+    mt = mt_lib.MtSerialHandler(port=config["meshtastic"]["port"])
+else:
+    raise TypeError("Érvényetelen connect_mode a config fájlban. TCP / serial")
 
 
-mt = mt_lib.MtTcpHandler(host='192.168.0.182')
-feeds = vesz_lib.BMFeeds()
+feeds = vesz_lib.BMFeeds(rss_url=config["vesz"]["rss_url"], postfix_text=config["vesz"]["postfix_text"])
 
 
 if __name__ == "__main__":
     init()
 
-    schedule.every(1).minutes.do(job)
-    #schedule.every().hour.do(job)
-    #schedule.every().day.at("10:30").do(job)
-
+    schedule.every(config["vesz"]["rss_read_time_min"]).minutes.do(job)
+    
     while True:
         try:
             schedule.run_pending()

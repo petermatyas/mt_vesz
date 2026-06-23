@@ -1,0 +1,18 @@
+[general]
+
+
+[meshtastic]
+connect_mode = "TCP"                  # TCP / serial
+host = "192.168.0.182"                # TCP connection
+#port = "/dev/ttyUSB0"                # serial connection
+emergency_channel_number = 1
+emergency_channel_name = "vesz_teszt"
+time_between_messages_s = 30
+
+
+[vesz]
+rss_url = "https://www.katasztrofavedelem.hu/10466/RSS_VESZ"
+rss_read_time_min = 10
+postfix_text = "hírforrás: BM OKF"
+
+

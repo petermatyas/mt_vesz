@@ -157,7 +157,7 @@ class MtHandler():
 
 
     def sendMessage(self, message, channelIndex=None, hopLimit=3,
-                    want_ack=True, ack_timeout=30, max_attempts=3):
+                    want_ack=False, ack_timeout=30, max_attempts=3):
         """Send a text message, optionally resending until it is acknowledged.
 
         With ``want_ack=True`` the radio requests an ACK. For a broadcast
@@ -251,7 +251,10 @@ class MtTcpHandler(MtHandler):
         self.interface = None
 
     def _create_interface(self):
-        return meshtastic.tcp_interface.TCPInterface(hostname=self.host)
+        try:
+            return meshtastic.tcp_interface.TCPInterface(hostname=self.host, timeout=10)
+        except:
+            raise RuntimeError("nem hozható létre TCP interface")
 
     def _target_desc(self):
         return f"Meshtastic device at {self.host}"
@@ -279,7 +282,7 @@ if __name__ == "__main__":
         'position_precision': 13
     })
     for i in range(5):
-        test_msg = f"Sending long long long long long long long long long long long long test message {i+1}"
+        test_msg = f"Sending test message {i+1}"
         print(test_msg)
         mt.sendMessage(message=test_msg)
         time.sleep(60)
