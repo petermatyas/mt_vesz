@@ -81,7 +81,7 @@ class BMFeeds():
             print(f"Takarítás kész: {original_len - len(self.cache)} elem törölve.")
 
     def getNews(self):
-        rawNews = self.download()
+        rawNews = self.download() or []
         news = list()
         for i in rawNews:
             text = i.title
