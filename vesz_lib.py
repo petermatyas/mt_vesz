@@ -35,13 +35,23 @@ class BMFeeds():
     def _save_cache(self):
         """Elmenti a jelenlegi cache tartalmát JSON fájlba.
 
-        Írási hiba (megtelt lemez, jogosultság stb.) nem állítja meg a programot:
-        csak jelezzük, és ``False``-szal térünk vissza. Ilyenkor a cache memóriában
-        frissül, de a lemezre nem íródik ki (a hírek a következő futáskor újra
-        újnak látszhatnak)."""
+        Egyik hiba sem állítja meg a programot – csak jelezzük, és ``False``-szal
+        térünk vissza. Ilyenkor a cache memóriában frissül, de a lemezre nem íródik
+        ki (a hírek a következő futáskor újra újnak látszhatnak):
+          - szerializálási hiba (nem JSON-be írható bejegyzés): TypeError/ValueError,
+          - írási hiba (megtelt lemez, jogosultság stb.): OSError.
+
+        Előbb stringgé szerializálunk, és csak utána írunk, hogy egy szerializálási
+        hiba ne hagyjon félig írt, sérült cache fájlt."""
+        try:
+            data = json.dumps(self.cache, ensure_ascii=False, indent=4)
+        except (TypeError, ValueError) as e:
+            print(f"Cache szerializálása sikertelen ({self.cache_file}): {e}")
+            return False
+
         try:
             with open(self.cache_file, 'w', encoding='utf-8') as f:
-                json.dump(self.cache, f, ensure_ascii=False, indent=4)
+                f.write(data)
             return True
         except OSError as e:
             print(f"Cache mentése sikertelen ({self.cache_file}): {e}")
@@ -69,6 +79,15 @@ class BMFeeds():
 
     def download(self):
         feed = feedparser.parse(self.url)
+
+        # A feedparser hálózati/parse-hibánál nem dob kivételt, csak a bozo flaget
+        # állítja – enélkül a hiba némán "0 új hír"-ként jelenne meg. Kiírjuk az okot
+        # a diagnosztikához. (bozo akkor is igaz lehet, ha az entries használható,
+        # ezért nem lépünk ki, csak jelzünk.)
+        if feed.bozo:
+            print(f"Figyelmeztetés: a hírfolyam feldolgozása hibát jelzett: "
+                  f"{feed.get('bozo_exception')}")
+
         if not feed.entries:
             return []
 
@@ -121,9 +140,10 @@ class BMFeeds():
         rawNews = self.download() or []
         news = list()
         for i in rawNews:
-            text = i.title
-            text += f" {self.postfix_text}"        
-            news.append(text)
+            title = i.get('title', '')  # cím nélküli bejegyzés ne dobjon AttributeError-t
+            if not title:
+                continue  # cím nélkül nincs értelmes üzenet, kihagyjuk
+            news.append(f"{title} {self.postfix_text}")
         return news
 
 if __name__ == "__main__":
