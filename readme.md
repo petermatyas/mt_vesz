@@ -39,13 +39,17 @@ Függőségek (`requirements.txt`):
 
 - `meshtastic[cli]` — kommunikáció a Meshtastic node-dal
 - `feedparser` — RSS feldolgozás
-- `schedule` — időzített futtatás
+- `schedule` — beépített időzített futtatás
+- `pyserial` — soros portok listázása (`list_ports.py`) és soros kapcsolat
 
 ## Konfiguráció
 
 Minden beállítás a `config.toml` fájlban található.
 
 ```toml
+[general]
+use_scheduler = false                 # true: beépített időzítővel folyamatosan fut; false: egyszer lefut és kilép
+
 [meshtastic]
 connect_mode = "TCP"                  # "TCP" vagy "serial"
 host = "192.168.0.182"                # TCP kapcsolat esetén a node IP-címe
@@ -59,6 +63,12 @@ rss_url = "https://www.katasztrofavedelem.hu/10466/RSS_VESZ"
 rss_read_time_min = 10                # hírlekérés gyakorisága (perc)
 postfix_text = "hírforrás: BM OKF"    # minden hír végére fűzött szöveg
 ```
+
+### `[general]` szekció
+
+| Kulcs | Leírás |
+|---|---|
+| `use_scheduler` | `true` esetén a program a beépített időzítővel folyamatosan fut (`rss_read_time_min` percenként). `false` esetén egyszer lefut (kapcsolódás → hírküldés → kilépés), így külső időzítővel (pl. crontab) hívható. |
 
 ### `[meshtastic]` szekció
 
@@ -92,14 +102,85 @@ A konfiguráció kitöltése után:
 python main.py
 ```
 
-A program:
+A program minden esetben:
 
 1. Csatlakozik a node-hoz, és beállítja a vészhelyzeti csatornát.
-2. Azonnal lefuttat egy első hírlekérést és -küldést.
-3. Ezután `rss_read_time_min` percenként ismétli a lekérést, amíg le nem állítod
-   (`Ctrl+C`).
+2. Lefuttat egy hírlekérést és -küldést.
 
-Leállításkor a program szabályosan lecsatlakozik a node-ról.
+Ezután a `[general] use_scheduler` értékétől függően:
+
+- **`use_scheduler = true`** (folyamatos mód): `rss_read_time_min` percenként ismétli a
+  lekérést, amíg le nem állítod (`Ctrl+C`). Ekkor a `schedule` csomag szükséges.
+- **`use_scheduler = false`** (egyszeri mód): a hírküldés után a program szabályosan
+  lecsatlakozik a node-ról és kilép. Az ismétlésről ilyenkor egy külső időzítő
+  (crontab, systemd timer, Windows Feladatütemező) gondoskodik — lásd lentebb.
+
+Leállításkor / kilépéskor a program szabályosan lecsatlakozik a node-ról.
+
+### Soros portok felderítése
+
+Soros (USB) kapcsolat esetén a megfelelő port neve a `list_ports.py` scripttel deríthető
+fel — Linuxon és Windowson egyaránt:
+
+```bash
+python list_ports.py
+```
+
+A talált eszköz nevét (pl. `/dev/ttyUSB0` vagy `COM3`) írd be a `config.toml`
+`[meshtastic] port` kulcsához.
+
+## Ütemezett futtatás külső időzítővel
+
+Ha a `[general] use_scheduler = false`, a `main.py` egyszer fut le és kilép, így külső
+időzítővel ütemezhető. Ez robusztusabb, mint a beépített időzítő, mert minden futás
+friss folyamatban, tiszta node-kapcsolattal indul.
+
+### Linux — crontab
+
+Nyisd meg a crontab szerkesztőt:
+
+```bash
+crontab -e
+```
+
+Add hozzá a következő sort (10 percenkénti futtatás, a projekt saját virtuális
+környezetével). A crontab nem ismeri a `cd`-t, ezért abszolút útvonalakat használj, és
+lépj a projekt könyvtárába, hogy a `config.toml` és a `cache.json` megtalálható legyen:
+
+```cron
+*/10 * * * * cd /home/pi/mt_vesz && /home/pi/mt_vesz/venv/bin/python main.py >> /home/pi/mt_vesz/cron.log 2>&1
+```
+
+Magyarázat:
+
+- `*/10 * * * *` — minden 10. percben. (`*/30` = félóránként, `0 * * * *` = óránként.)
+- `cd /home/pi/mt_vesz` — a projekt könyvtára, hogy a relatív útvonalú fájlok (`config.toml`,
+  `cache.json`) elérhetők legyenek.
+- `venv/bin/python main.py` — a virtuális környezet Pythonja (a cron környezetében nincs
+  aktivált venv, ezért kell a teljes útvonal).
+- `>> cron.log 2>&1` — a kimenet és a hibák naplózása (hasznos hibakereséshez).
+
+Ellenőrzés:
+
+```bash
+crontab -l          # a beállított feladatok listája
+tail -f cron.log    # a futások élő naplója
+```
+
+> **Fontos:** két futás ne fusson egyszerre (a node egyszerre egy kapcsolatot kezel jól).
+> Válaszd a `*/10` intervallumot elég nagyra ahhoz, hogy egy futás (kapcsolódás +
+> összes hír kiküldése `time_between_messages_s` szünetekkel) biztosan befejeződjön.
+
+### Windows — Feladatütemező
+
+Egyszeri módban Windowson a Feladatütemezővel (Task Scheduler) ütemezhető:
+
+```powershell
+schtasks /Create /TN "mt_vesz" /TR "cmd /c cd /d E:\mt_vesz && E:\mt_vesz\venv\Scripts\python.exe main.py >> E:\mt_vesz\cron.log 2>&1" /SC MINUTE /MO 10
+```
+
+- `/SC MINUTE /MO 10` — 10 percenként. (`/SC HOURLY` = óránként.)
+- A feladat törlése: `schtasks /Delete /TN "mt_vesz" /F`.
 
 ## Cache
 
@@ -115,6 +196,7 @@ hogy ugyanaz a hír ne menjen ki kétszer. A fájl a `.gitignore`-ban szerepel.
 | Fájl | Szerep |
 |---|---|
 | `main.py` | Belépési pont: kapcsolódás, ütemezés, hírküldés. |
+| `list_ports.py` | Elérhető soros (USB) portok listázása (Linux/Windows). |
 | `mt_lib.py` | Meshtastic kapcsolatkezelés (TCP/soros), újracsatlakozás, üzenetküldés ACK-kal. |
 | `vesz_lib.py` | RSS-letöltés és cache-kezelés (`BMFeeds` osztály). |
 | `config.toml` | Konfiguráció. |
