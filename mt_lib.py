@@ -156,19 +156,12 @@ class MtHandler():
             pass
 
 
-    def sendMessage(self, message, channelIndex=None, hopLimit=3,
-                    want_ack=False, ack_timeout=30, max_attempts=3):
-        """Send a text message, optionally resending until it is acknowledged.
+    def sendMessage(self, message, channelIndex=None, hopLimit=3, max_attempts=3):
+        """Send a text message (fire-and-forget).
 
-        With ``want_ack=True`` the radio requests an ACK. For a broadcast
-        (channel) message this is an *implicit* ACK: it arrives once at least one
-        neighbouring node rebroadcasts/hears the packet, i.e. "something received
-        it". If no ACK arrives within ``ack_timeout`` seconds the message is
-        resent, up to ``max_attempts`` times. Set ``want_ack=False`` for plain
-        fire-and-forget behaviour.
-
-        Raises the last connection error, or ``TimeoutError`` if the message was
-        never acknowledged.
+        On a connection-level failure the send is retried up to ``max_attempts``
+        times, reconnecting in between. Raises the last connection error if every
+        attempt fails.
         """
         if channelIndex is None:
             channelIndex = self.default_channel_index
@@ -178,48 +171,22 @@ class MtHandler():
             self._ensure_connected()
             gen = self._generation
 
-            ack_event = threading.Event()
-            ack_ok = {"value": False}
-
-            def _on_response(packet, ack_event=ack_event, ack_ok=ack_ok):
-                try:
-                    err = packet.get("decoded", {}).get("routing", {}).get("errorReason", "NONE")
-                    ack_ok["value"] = (err == "NONE")
-                except Exception:
-                    ack_ok["value"] = False
-                finally:
-                    ack_event.set()
-
             try:
                 self.interface.sendText(
                     text=message,
                     channelIndex=channelIndex,
                     hopLimit=hopLimit,
-                    wantAck=want_ack,
-                    onResponse=_on_response if want_ack else None,
                 )
                 #print(f"Sent message: {message}")
+                return
             except Exception as e:
                 last_err = e
                 print(f"Failed to send message (attempt {attempt + 1}/{max_attempts}): {e}")
                 # Connection-level failure: reconnect (tied to this generation) and retry.
                 self.reconnect(expected_generation=gen)
-                continue
-
-            if not want_ack:
-                return  # fire-and-forget, nothing to wait for
-
-            if ack_event.wait(timeout=ack_timeout):
-                if ack_ok["value"]:
-                    #print("ACK received")
-                    return
-                print(f"Message NAK'd (attempt {attempt + 1}/{max_attempts}), resending...")
-            else:
-                print(f"No ACK within {ack_timeout}s (attempt {attempt + 1}/{max_attempts}), resending...")
 
         if last_err is not None:
             raise last_err
-        raise TimeoutError(f"Message not acknowledged after {max_attempts} attempts: {message!r}")
 
 class MtSerialHandler(MtHandler):
     def __init__(self, port='/dev/ttyUSB0', **kwargs):

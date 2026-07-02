@@ -42,10 +42,6 @@ def job():
         print("Sending news: ", repr(i))
         try:
             mt.sendMessage(i)
-        except TimeoutError as e:
-            # Nem érkezett ACK az újraküldések után sem – a node valószínűleg
-            # egyedül van, vagy nincs vétel. Lépjünk a következő hírre.
-            print(f"Hír nem lett kézbesítve (nincs ACK): {e}")
         except Exception as e:
             print(f"Hír küldése sikertelen: {e}")
 
