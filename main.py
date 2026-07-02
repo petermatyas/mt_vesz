@@ -95,7 +95,12 @@ if __name__ == "__main__":
         raise SystemExit("Hiba: érvénytelen connect_mode a config fájlban (TCP / serial).")
 
 
-    feeds = vesz_lib.BMFeeds(rss_url=cfg("vesz.rss_url"), postfix_text=cfg("vesz.postfix_text"))
+    feeds = vesz_lib.BMFeeds(
+        rss_url=cfg("vesz.rss_url"),
+        postfix_text=cfg("vesz.postfix_text"),
+        max_cache_entries=cfg("vesz.cache_max_entries", 0),
+        clear_time_s=cfg("vesz.cache_clear_time_days", 30) * 24 * 3600,
+    )
 
 
     init()

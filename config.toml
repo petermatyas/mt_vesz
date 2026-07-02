@@ -16,5 +16,7 @@ connect_max_retries = 10              # csatlakozási próbák száma feladás e
 rss_url = "https://www.katasztrofavedelem.hu/10466/RSS_VESZ"
 rss_read_time_min = 10                 # csak use_scheduler = true esetén számít
 postfix_text = "hírforrás: BM OKF"
+cache_max_entries = 500                # ha a cache ennél több bejegyzésre nő, lefut a takarítás (0 = kikapcsolva)
+cache_clear_time_days = 30             # takarításkor az ennél régebbi bejegyzések törlődnek
 
 

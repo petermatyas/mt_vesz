@@ -8,12 +8,18 @@ import os
 
 
 class BMFeeds():
-    def __init__(self, rss_url="https://www.katasztrofavedelem.hu/10466/RSS_VESZ", 
+    def __init__(self, rss_url="https://www.katasztrofavedelem.hu/10466/RSS_VESZ",
                  cache_file='cache.json',
-                 postfix_text="hírforrás: BM OKF"):
+                 postfix_text="hírforrás: BM OKF",
+                 max_cache_entries=0,
+                 clear_time_s=30 * 24 * 3600):
         self.url = rss_url
         self.cache_file = cache_file
         self.postfix_text = postfix_text
+        # Ha a cache ennél több bejegyzésre nő, lefut az idő-alapú takarítás
+        # (0 = kikapcsolva). A clear_time_s adja meg, milyen régi elemek törlődnek.
+        self.max_cache_entries = max_cache_entries
+        self.clear_time_s = clear_time_s
         self.cache = self._load_cache()
 
     def _load_cache(self):
@@ -71,7 +77,16 @@ class BMFeeds():
         added, news = self.update_cache(feed.entries)
         if added:
             self._save_cache()  # csak akkor írunk lemezre, ha tényleg jött új hír
+            self._enforce_cache_limit()  # túl nagy cache esetén takarítás
         return news
+
+    def _enforce_cache_limit(self):
+        """Ha a cache mérete meghaladja a beállított limitet, lefuttatja az
+        idő-alapú takarítást (a ``clear_time_s``-nél régebbi elemeket törli)."""
+        if self.max_cache_entries and len(self.cache) > self.max_cache_entries:
+            print(f"Cache mérete ({len(self.cache)}) meghaladta a limitet "
+                  f"({self.max_cache_entries}) – takarítás indul.")
+            self.clear_cache(self.clear_time_s)
 
 
     def update_cache(self, entries):

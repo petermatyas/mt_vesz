@@ -89,6 +89,8 @@ postfix_text = "hírforrás: BM OKF"    # minden hír végére fűzött szöveg
 | `rss_url` | A figyelt RSS-hírcsatorna URL-je. |
 | `rss_read_time_min` | Milyen gyakran (percben) kérdezze le újra a hírfolyamot. |
 | `postfix_text` | Minden kiküldött hír végéhez hozzáfűzött szöveg. |
+| `cache_max_entries` | Ha a `cache.json` ennél több bejegyzésre nő, új hír érkezésekor automatikusan lefut a takarítás. `0` = kikapcsolva (korlátlan növekedés). |
+| `cache_clear_time_days` | Takarításkor az ennél régebbi (napban) bejegyzések törlődnek a cache-ből. |
 
 > **Megjegyzés a csatornáról:** a szkript a kiválasztott csatornát a `psk='AQ=='`
 > (alapértelmezett, nyilvános kulcs), `uplink_enabled=False`, `downlink_enabled=True`
