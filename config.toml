@@ -5,7 +5,7 @@ use_scheduler = false                  # true: beépített időzítővel fut fol
 [meshtastic]
 connect_mode = "TCP"                  # TCP / serial
 host = "192.168.0.182"                # TCP connection
-#port = "/dev/ttyUSB0"                # serial connection
+port = "/dev/ttyUSB0"                 # serial connection
 emergency_channel_number = 1
 emergency_channel_name = "vesz_teszt"
 time_between_messages_s = 30

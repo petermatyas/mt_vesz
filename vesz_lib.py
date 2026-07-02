@@ -1,7 +1,9 @@
 import feedparser
 import re
 import json
+import calendar
 from datetime import datetime
+from email.utils import parsedate_to_datetime
 import time
 import os
 import schedule
@@ -34,12 +36,31 @@ class BMFeeds():
         with open(self.cache_file, 'w', encoding='utf-8') as f:
             json.dump(self.cache, f, ensure_ascii=False, indent=4)
 
+    @staticmethod
+    def _item_timestamp(item):
+        """POSIX időbélyeg egy cache-elemhez, locale-független módon.
+
+        Elsődlegesen a feedparser ``published_parsed`` mezőjét használja (UTC
+        struct_time, a JSON cache-ben 9 elemű listaként tárolva); ha az hiányzik,
+        a ``published`` RFC 2822 stringet az email.utils-szal értelmezi (ez sem
+        locale-függő). Ha egyik sem értelmezhető, ``None``-t ad vissza."""
+        parsed = item.get('published_parsed')
+        if parsed:
+            # calendar.timegm UTC struct_time-ot vár (a JSON-ből lista jön).
+            return calendar.timegm(tuple(parsed))
+        published = item.get('published')
+        if published:
+            try:
+                return parsedate_to_datetime(published).timestamp()
+            except (TypeError, ValueError):
+                return None
+        return None
+
     def _get_max_timestamp(self):
         """Megkeresi a legfrissebb elem időbélyegét a cache-ben."""
-        if not self.cache:
-            return 0
-        return max(time.mktime(time.strptime(item['published'], "%a, %d %b %Y %H:%M:%S %z")) 
-                   for item in self.cache if 'published' in item)
+        timestamps = [ts for ts in (self._item_timestamp(item) for item in self.cache)
+                      if ts is not None]
+        return max(timestamps) if timestamps else 0
 
     def download(self):
         feed = feedparser.parse(self.url)
@@ -73,12 +94,14 @@ class BMFeeds():
     def clear_cache(self, clear_time_s):
         now_ts = datetime.now().timestamp()
         original_len = len(self.cache)
-        
-        self.cache = [
-            item for item in self.cache 
-            if (now_ts - time.mktime(time.strptime(item['published'], "%a, %d %b %Y %H:%M:%S %z"))) < clear_time_s
-        ]
-        
+
+        def _keep(item):
+            ts = self._item_timestamp(item)
+            # Értelmezhetetlen időbélyegű elemet biztonságból megtartunk.
+            return ts is None or (now_ts - ts) < clear_time_s
+
+        self.cache = [item for item in self.cache if _keep(item)]
+
         if len(self.cache) < original_len:
             self._save_cache()
             print(f"Takarítás kész: {original_len - len(self.cache)} elem törölve.")
