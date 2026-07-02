@@ -8,16 +8,20 @@ riasztások.
 
 ## Hogyan működik
 
+A vészhelyzeti csatornát **egyszer**, a `setup_channel.py` scripttel állítod be a
+node-on (lásd lentebb). A rutin hírküldés (`main.py`) ezután:
+
 1. Csatlakozik a Meshtastic node-hoz (TCP-n vagy soros porton).
-2. Beállít egy vészhelyzeti csatornát. 
-3. Indító üzenetet küld a csatornára.
-4. Letölti az RSS-hírfolyamot, és a már látott híreket egy `cache.json`-ban tárolja.
-5. Az új híreket egyenként kiküldi a hálózatra, beállított szünettel a küldések között.
-6. Beállított időközönként ismétli a hírlekérést.
+2. Letölti az RSS-hírfolyamot, és a már látott híreket egy `cache.json`-ban tárolja.
+3. Az új híreket egyenként kiküldi a hálózatra, beállított szünettel a küldések között.
+4. (Folyamatos módban) beállított időközönként ismétli a hírlekérést.
+
+A `main.py` szándékosan **nem** írja újra a csatorna-konfigurációt minden futáskor –
+így cron-módban sem terheli feleslegesen a node flash-memóriáját.
 
 A node kapcsolat megszakadását automatikusan kezeli: a könyvtár exponenciális
-visszalépéssel (backoff) újrapróbálkozik, az üzenetküldés pedig opcionálisan ACK-ig
-újraküldhető (lásd `mt_lib.py`).
+visszalépéssel (backoff) újrapróbálkozik (a próbák számát a `connect_max_retries`
+korlátozza).
 
 ## Telepítés
 
@@ -92,14 +96,26 @@ postfix_text = "hírforrás: BM OKF"    # minden hír végére fűzött szöveg
 | `cache_max_entries` | Ha a `cache.json` ennél több bejegyzésre nő, új hír érkezésekor automatikusan lefut a takarítás. `0` = kikapcsolva (korlátlan növekedés). |
 | `cache_clear_time_days` | Takarításkor az ennél régebbi (napban) bejegyzések törlődnek a cache-ből. |
 
-> **Megjegyzés a csatornáról:** a szkript a kiválasztott csatornát a `psk='AQ=='`
-> (alapértelmezett, nyilvános kulcs), `uplink_enabled=False`, `downlink_enabled=True`
-> beállításokkal hozza létre. Ha titkosított, zárt csatornát szeretnél, módosítsd a
-> `psk` értékét a `main.py` `init()` függvényében.
+> **Megjegyzés a csatornáról:** a `setup_channel.py` a kiválasztott csatornát a
+> `psk='AQ=='` (alapértelmezett, nyilvános kulcs), `uplink_enabled=False`,
+> `downlink_enabled=True` beállításokkal hozza létre. Ha titkosított, zárt csatornát
+> szeretnél, módosítsd a `psk` értékét a `setup_channel.py`-ben.
 
 ## Használat
 
-A konfiguráció kitöltése után:
+### 1. Csatorna beállítása (egyszeri)
+
+A `config.toml` kitöltése után **egyszer** futtasd le a csatorna-beállítót. Ez
+létrehozza/beállítja a vészhelyzeti csatornát a node-on, majd kilép:
+
+```bash
+python setup_channel.py
+```
+
+Ezt csak akkor kell újrafuttatni, ha a csatorna beállításait (`[meshtastic]`
+szekció: index, név) módosítod.
+
+### 2. Hírküldés
 
 ```bash
 python main.py
@@ -107,7 +123,7 @@ python main.py
 
 A program minden esetben:
 
-1. Csatlakozik a node-hoz, és beállítja a vészhelyzeti csatornát.
+1. Csatlakozik a node-hoz (a csatornát nem állítja – azt a `setup_channel.py` tette meg).
 2. Lefuttat egy hírlekérést és -küldést.
 
 Ezután a `[general] use_scheduler` értékétől függően:
@@ -199,6 +215,7 @@ hogy ugyanaz a hír ne menjen ki kétszer. A fájl a `.gitignore`-ban szerepel.
 | Fájl | Szerep |
 |---|---|
 | `main.py` | Belépési pont: kapcsolódás, ütemezés, hírküldés. |
+| `setup_channel.py` | A vészhelyzeti csatorna egyszeri beállítása a node-on. |
 | `list_ports.py` | Elérhető soros (USB) portok listázása (Linux/Windows). |
 | `mt_lib.py` | Meshtastic kapcsolatkezelés (TCP/soros), újracsatlakozás, üzenetküldés ACK-kal. |
 | `vesz_lib.py` | RSS-letöltés és cache-kezelés (`BMFeeds` osztály). |

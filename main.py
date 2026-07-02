@@ -36,27 +36,31 @@ def cfg(path, default=_MISSING):
     return node
 
 
+def build_handler():
+    """A configból létrehozza a megfelelő Meshtastic handlert (TCP / serial).
+
+    A csatlakozás még nem történik meg – azt a hívó ``mt.connect()``-tel indítja."""
+    connect_mode = cfg("meshtastic.connect_mode").lower()
+    # 0 (vagy hiányzó) => végtelen újrapróbálkozás; >0 => ennyi próba után feladja.
+    max_retries = cfg("meshtastic.connect_max_retries", 0) or None
+    if connect_mode == "tcp":
+        return mt_lib.MtTcpHandler(host=cfg("meshtastic.host"), max_retries=max_retries)
+    elif connect_mode == "serial":
+        return mt_lib.MtSerialHandler(port=cfg("meshtastic.port"), max_retries=max_retries)
+    raise SystemExit("Hiba: érvénytelen connect_mode a config fájlban (TCP / serial).")
+
+
 def init():
-    """Kapcsolódás és csatorna beállítása. A mt.connect() magától újrapróbálkozik,
-    így ez addig blokkol, amíg sikerül csatlakozni."""
+    """Kapcsolódás a node-hoz. A mt.connect() a beállított darabszámig
+    (connect_max_retries) újrapróbálkozik; ha nem sikerül, hibával kilépünk.
+
+    A csatorna beállítását NEM itt végezzük – azt a setup_channel.py külön,
+    egyszeri lépésként teszi meg, hogy a rutin futások ne írjanak feleslegesen
+    a node flash-ébe."""
     try:
         mt.connect()
     except Exception as e:
-        # Korlátozott újrapróbálkozás (connect_max_retries) kimerült: ne ragadjon be
-        # a folyamat (fontos cron/egyszeri módban), lépjünk ki érthető hibával.
         raise SystemExit(f"Hiba: nem sikerült csatlakozni a node-hoz: {e}")
-
-    try:
-        mt.setChannel(edit_channel=cfg("meshtastic.emergency_channel_number"),
-                      new_settings={
-                        'psk': 'AQ==',
-                        'name': cfg("meshtastic.emergency_channel_name"),
-                        'uplink_enabled': False,
-                        'downlink_enabled': True,
-                        'position_precision': 13
-                    })
-    except Exception as e:
-        print(f"Csatorna beállítása sikertelen: {e}")
 
 
 def job():
@@ -84,16 +88,7 @@ def job():
 
 
 if __name__ == "__main__":
-    connect_mode = cfg("meshtastic.connect_mode").lower()
-    # 0 (vagy hiányzó) => végtelen újrapróbálkozás; >0 => ennyi próba után feladja.
-    max_retries = cfg("meshtastic.connect_max_retries", 0) or None
-    if connect_mode == "tcp":
-        mt = mt_lib.MtTcpHandler(host=cfg("meshtastic.host"), max_retries=max_retries)
-    elif connect_mode == "serial":
-        mt = mt_lib.MtSerialHandler(port=cfg("meshtastic.port"), max_retries=max_retries)
-    else:
-        raise SystemExit("Hiba: érvénytelen connect_mode a config fájlban (TCP / serial).")
-
+    mt = build_handler()
 
     feeds = vesz_lib.BMFeeds(
         rss_url=cfg("vesz.rss_url"),
