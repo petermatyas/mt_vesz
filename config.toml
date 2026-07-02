@@ -1,4 +1,5 @@
 [general]
+use_scheduler = false                  # true: beépített időzítővel fut folyamatosan; false: egyszer lefut és kilép (külső időzítőhöz)
 
 
 [meshtastic]
@@ -12,7 +13,7 @@ time_between_messages_s = 30
 
 [vesz]
 rss_url = "https://www.katasztrofavedelem.hu/10466/RSS_VESZ"
-rss_read_time_min = 10
+rss_read_time_min = 10                 # csak use_scheduler = true esetén számít
 postfix_text = "hírforrás: BM OKF"
 
 

@@ -1,5 +1,4 @@
 import time
-import schedule
 import tomllib
 
 import mt_lib
@@ -28,11 +27,6 @@ def init():
                     })
     except Exception as e:
         print(f"Csatorna beállítása sikertelen: {e}")
-
-    try:
-        mt.sendMessage("Veszélyhelyzet információs rendszer elindult.")
-    except Exception as e:
-        print(f"Indító üzenet küldése sikertelen: {e}")
 
 
 def job():
@@ -75,24 +69,27 @@ if __name__ == "__main__":
     feeds = vesz_lib.BMFeeds(rss_url=config["vesz"]["rss_url"], postfix_text=config["vesz"]["postfix_text"])
 
 
-
     init()
     job()
-    
-    schedule.every(config["vesz"]["rss_read_time_min"]).minutes.do(job)
-    
-    while True:
-        try:
-            schedule.run_pending()
-        except KeyboardInterrupt:
-            print("Program leállítva.")
-            break
-        except Exception as e:
-            # A ciklus semmilyen váratlan hibától ne álljon meg.
-            print(f"Hiba történt a fő ciklusban: {e}")
-            time.sleep(5)
 
-        time.sleep(1)
+    if config["general"].get("use_scheduler", True):
+        # Beépített időzítővel folyamatosan fut.
+        import schedule
+
+        schedule.every(config["vesz"]["rss_read_time_min"]).minutes.do(job)
+
+        while True:
+            try:
+                schedule.run_pending()
+            except KeyboardInterrupt:
+                print("Program leállítva.")
+                break
+            except Exception as e:
+                # A ciklus semmilyen váratlan hibától ne álljon meg.
+                print(f"Hiba történt a fő ciklusban: {e}")
+                time.sleep(5)
+
+            time.sleep(1)
 
     try:
         mt.disconnect()
