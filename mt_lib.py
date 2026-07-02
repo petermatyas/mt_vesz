@@ -220,8 +220,8 @@ class MtTcpHandler(MtHandler):
     def _create_interface(self):
         try:
             return meshtastic.tcp_interface.TCPInterface(hostname=self.host, timeout=10)
-        except:
-            raise RuntimeError("nem hozható létre TCP interface")
+        except Exception as e:
+            raise RuntimeError(f"nem hozható létre TCP interface: {e}") from e
 
     def _target_desc(self):
         return f"Meshtastic device at {self.host}"

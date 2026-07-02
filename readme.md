@@ -80,6 +80,7 @@ postfix_text = "hírforrás: BM OKF"    # minden hír végére fűzött szöveg
 | `emergency_channel_number` | A módosítandó csatorna indexe. `0` a primary csatorna, `1`–`7` a secondary csatornák. |
 | `emergency_channel_name` | A vészhelyzeti csatorna neve. |
 | `time_between_messages_s` | Várakozás másodpercben két hír kiküldése között (a mesh hálózat tehermentesítésére). |
+| `connect_max_retries` | Hány csatlakozási próba után adja fel a program, ha a node nem elérhető. `0` = végtelen újrapróbálkozás (folyamatos/daemon módhoz). Egyszeri/cron módban **állítsd véges értékre** (pl. `10`), különben a node kiesésekor a folyamat végtelenségig lóg, és a cron újabb beragadt folyamatokat halmozna fel. |
 
 ### `[vesz]` szekció
 

@@ -9,6 +9,7 @@ port = "/dev/ttyUSB0"                 # serial connection
 emergency_channel_number = 1
 emergency_channel_name = "vesz_teszt"
 time_between_messages_s = 30
+connect_max_retries = 10              # csatlakozási próbák száma feladás előtt; 0 = végtelen (folyamatos módhoz), >0 ajánlott egyszeri/cron módban
 
 
 [vesz]

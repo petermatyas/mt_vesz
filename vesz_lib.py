@@ -1,12 +1,9 @@
 import feedparser
-import re
 import json
 import calendar
 from datetime import datetime
 from email.utils import parsedate_to_datetime
-import time
 import os
-import schedule
 
 
 
@@ -18,8 +15,6 @@ class BMFeeds():
         self.cache_file = cache_file
         self.postfix_text = postfix_text
         self.cache = self._load_cache()
-        # Az utolsó frissítés idejét a legfrissebb cache elemhez igazítjuk
-        self.last_updated_cache_time = self._get_max_timestamp()
 
     def _load_cache(self):
         """Betölti a cache-t a fájlból, ha létezik."""
@@ -32,9 +27,19 @@ class BMFeeds():
         return []
 
     def _save_cache(self):
-        """Elmenti a jelenlegi cache tartalmát JSON fájlba."""
-        with open(self.cache_file, 'w', encoding='utf-8') as f:
-            json.dump(self.cache, f, ensure_ascii=False, indent=4)
+        """Elmenti a jelenlegi cache tartalmát JSON fájlba.
+
+        Írási hiba (megtelt lemez, jogosultság stb.) nem állítja meg a programot:
+        csak jelezzük, és ``False``-szal térünk vissza. Ilyenkor a cache memóriában
+        frissül, de a lemezre nem íródik ki (a hírek a következő futáskor újra
+        újnak látszhatnak)."""
+        try:
+            with open(self.cache_file, 'w', encoding='utf-8') as f:
+                json.dump(self.cache, f, ensure_ascii=False, indent=4)
+            return True
+        except OSError as e:
+            print(f"Cache mentése sikertelen ({self.cache_file}): {e}")
+            return False
 
     @staticmethod
     def _item_timestamp(item):
@@ -56,25 +61,16 @@ class BMFeeds():
                 return None
         return None
 
-    def _get_max_timestamp(self):
-        """Megkeresi a legfrissebb elem időbélyegét a cache-ben."""
-        timestamps = [ts for ts in (self._item_timestamp(item) for item in self.cache)
-                      if ts is not None]
-        return max(timestamps) if timestamps else 0
-
     def download(self):
         feed = feedparser.parse(self.url)
         if not feed.entries:
-            return
+            return []
 
-        current_feed_time = time.mktime(feed.get('updated_parsed', time.gmtime()))
-
-        news = list()
-        if current_feed_time > self.last_updated_cache_time:
-            added, news = self.update_cache(feed.entries)
-            self.last_updated_cache_time = current_feed_time
-            self._save_cache() # Mentés minden sikeres letöltés után
-
+        # A dedupot a link-alapú összehasonlítás végzi (update_cache), ezért nincs
+        # szükség külön idő-alapú szűrőre.
+        added, news = self.update_cache(feed.entries)
+        if added:
+            self._save_cache()  # csak akkor írunk lemezre, ha tényleg jött új hír
         return news
 
 
