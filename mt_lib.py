@@ -1,4 +1,5 @@
 import base64
+import logging
 import threading
 import time
 
@@ -8,6 +9,9 @@ import meshtastic.serial_interface, meshtastic.tcp_interface
 from meshtastic.protobuf import channel_pb2
 
 from pubsub import pub
+
+
+logger = logging.getLogger(__name__)
 
 
 class MtHandler():
@@ -47,19 +51,20 @@ class MtHandler():
             try:
                 self.interface = self._create_interface()
                 self._connected = True
-                print(f"Connected to {self._target_desc()}")
+                logger.info("Connected to %s", self._target_desc())
                 if self.on_connect:
                     try:
                         self.on_connect(self)
                     except Exception as e:
-                        print(f"on_connect hook failed: {e}")
+                        logger.error("on_connect hook failed: %s", e)
                 return
             except Exception as e:
                 self._connected = False
-                print(f"Failed to connect to {self._target_desc()} (attempt {attempt}): {e}")
+                logger.error("Failed to connect to %s (attempt %d): %s",
+                             self._target_desc(), attempt, e)
                 if self.max_retries is not None and attempt >= self.max_retries:
                     raise
-                print(f"Retrying in {delay} s...")
+                logger.info("Retrying in %d s...", delay)
                 time.sleep(delay)
                 delay = min(delay * 2, self.max_reconnect_delay)
 
@@ -70,7 +75,7 @@ class MtHandler():
         # Ignore events from interfaces that aren't the one we currently hold.
         if interface is not None and self.interface is not None and interface is not self.interface:
             return
-        print(f"Connection to {self._target_desc()} lost. Reconnecting...")
+        logger.warning("Connection to %s lost. Reconnecting...", self._target_desc())
         # Reconnect on a separate thread so we don't block/recurse the dying reader thread.
         gen = self._generation
         threading.Thread(
@@ -177,11 +182,13 @@ class MtHandler():
                     channelIndex=channelIndex,
                     hopLimit=hopLimit,
                 )
-                #print(f"Sent message: {message}")
+                # Sikeres rádiós küldés – naplózzuk (csatorna + üzenet).
+                logger.info("Üzenet elküldve (csatorna %d): %r", channelIndex, message)
                 return
             except Exception as e:
                 last_err = e
-                print(f"Failed to send message (attempt {attempt + 1}/{max_attempts}): {e}")
+                logger.error("Failed to send message (attempt %d/%d): %s",
+                             attempt + 1, max_attempts, e)
                 # Connection-level failure: reconnect (tied to this generation) and retry.
                 self.reconnect(expected_generation=gen)
 

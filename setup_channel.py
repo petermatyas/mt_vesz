@@ -11,7 +11,12 @@ Használat:
     python setup_channel.py
 """
 
+import logging
+
 from main import cfg, build_handler
+
+
+logger = logging.getLogger(__name__)
 
 
 def main():
@@ -20,6 +25,7 @@ def main():
     try:
         mt.connect()
     except Exception as e:
+        logger.error("Nem sikerült csatlakozni a node-hoz: %s", e)
         raise SystemExit(f"Hiba: nem sikerült csatlakozni a node-hoz: {e}")
 
     try:
@@ -33,14 +39,14 @@ def main():
                 'position_precision': 13,
             },
         )
-        print("Vészhelyzeti csatorna beállítva.")
+        logger.info("Vészhelyzeti csatorna beállítva.")
     except Exception as e:
-        print(f"Csatorna beállítása sikertelen: {e}")
+        logger.error("Csatorna beállítása sikertelen: %s", e)
     finally:
         try:
             mt.disconnect()
         except Exception as e:
-            print(f"Lecsatlakozás sikertelen: {e}")
+            logger.error("Lecsatlakozás sikertelen: %s", e)
 
 
 if __name__ == "__main__":

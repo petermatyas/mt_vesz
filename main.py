@@ -1,9 +1,13 @@
+import logging
 import time
 import tomllib
 
+import log_setup
 import mt_lib
 import vesz_lib
 
+
+logger = logging.getLogger(__name__)
 
 CONFIG_FILE = "config.toml"
 
@@ -36,6 +40,15 @@ def cfg(path, default=_MISSING):
     return node
 
 
+# A naplózást a config betöltése után, minden más előtt beállítjuk, hogy a
+# sikeres rádiós üzenetek és minden hiba méretkorlátos logfájlba is kerüljön.
+log_setup.setup_logging(
+    log_file=cfg("log.file", "mt_vesz.log"),
+    max_size_kb=cfg("log.max_size_kb", 1024),
+    backup_count=cfg("log.backup_count", 3),
+)
+
+
 def build_handler():
     """A configból létrehozza a megfelelő Meshtastic handlert (TCP / serial).
 
@@ -60,6 +73,7 @@ def init():
     try:
         mt.connect()
     except Exception as e:
+        logger.error("Nem sikerült csatlakozni a node-hoz: %s", e)
         raise SystemExit(f"Hiba: nem sikerült csatlakozni a node-hoz: {e}")
 
 
@@ -68,19 +82,19 @@ def job():
     try:
         news = feeds.getNews()
     except Exception as e:
-        print(f"Hírek lekérése sikertelen: {e}")
+        logger.error("Hírek lekérése sikertelen: %s", e)
         return
 
-    print(f"Új hírek száma: {len(news)}")
+    logger.info("Új hírek száma: %d", len(news))
     delay = cfg("meshtastic.time_between_messages_s")
     for idx, i in enumerate(news):
         if idx > 0:
             time.sleep(delay)  # szünet CSAK a hírek között, az utolsó után nem
-        print("Sending news: ", repr(i))
+        logger.info("Hír küldése: %r", i)
         try:
             mt.sendMessage(i)
         except Exception as e:
-            print(f"Hír küldése sikertelen: {e}")
+            logger.error("Hír küldése sikertelen: %s", e)
 
 
 
@@ -111,11 +125,11 @@ if __name__ == "__main__":
             try:
                 schedule.run_pending()
             except KeyboardInterrupt:
-                print("Program leállítva.")
+                logger.info("Program leállítva.")
                 break
             except Exception as e:
                 # A ciklus semmilyen váratlan hibától ne álljon meg.
-                print(f"Hiba történt a fő ciklusban: {e}")
+                logger.exception("Hiba történt a fő ciklusban: %s", e)
                 time.sleep(5)
 
             time.sleep(1)
@@ -123,4 +137,4 @@ if __name__ == "__main__":
     try:
         mt.disconnect()
     except Exception as e:
-        print(f"Lecsatlakozás sikertelen: {e}")
+        logger.error("Lecsatlakozás sikertelen: %s", e)

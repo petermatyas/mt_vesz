@@ -1,9 +1,13 @@
 import feedparser
 import json
 import calendar
+import logging
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 import os
+
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -46,7 +50,7 @@ class BMFeeds():
         try:
             data = json.dumps(self.cache, ensure_ascii=False, indent=4)
         except (TypeError, ValueError) as e:
-            print(f"Cache szerializálása sikertelen ({self.cache_file}): {e}")
+            logger.error("Cache szerializálása sikertelen (%s): %s", self.cache_file, e)
             return False
 
         try:
@@ -54,7 +58,7 @@ class BMFeeds():
                 f.write(data)
             return True
         except OSError as e:
-            print(f"Cache mentése sikertelen ({self.cache_file}): {e}")
+            logger.error("Cache mentése sikertelen (%s): %s", self.cache_file, e)
             return False
 
     @staticmethod
@@ -85,8 +89,8 @@ class BMFeeds():
         # a diagnosztikához. (bozo akkor is igaz lehet, ha az entries használható,
         # ezért nem lépünk ki, csak jelzünk.)
         if feed.bozo:
-            print(f"Figyelmeztetés: a hírfolyam feldolgozása hibát jelzett: "
-                  f"{feed.get('bozo_exception')}")
+            logger.warning("A hírfolyam feldolgozása hibát jelzett: %s",
+                           feed.get('bozo_exception'))
 
         if not feed.entries:
             return []
@@ -103,8 +107,8 @@ class BMFeeds():
         """Ha a cache mérete meghaladja a beállított limitet, lefuttatja az
         idő-alapú takarítást (a ``clear_time_s``-nél régebbi elemeket törli)."""
         if self.max_cache_entries and len(self.cache) > self.max_cache_entries:
-            print(f"Cache mérete ({len(self.cache)}) meghaladta a limitet "
-                  f"({self.max_cache_entries}) – takarítás indul.")
+            logger.info("Cache mérete (%d) meghaladta a limitet (%d) – takarítás indul.",
+                        len(self.cache), self.max_cache_entries)
             self.clear_cache(self.clear_time_s)
 
 
@@ -134,7 +138,7 @@ class BMFeeds():
 
         if len(self.cache) < original_len:
             self._save_cache()
-            print(f"Takarítás kész: {original_len - len(self.cache)} elem törölve.")
+            logger.info("Takarítás kész: %d elem törölve.", original_len - len(self.cache))
 
     def getNews(self):
         rawNews = self.download() or []

@@ -12,6 +12,12 @@ time_between_messages_s = 30
 connect_max_retries = 10              # csatlakozási próbák száma feladás előtt; 0 = végtelen (folyamatos módhoz), >0 ajánlott egyszeri/cron módban
 
 
+[log]
+file = "mt_vesz.log"                   # a logfájl neve/útvonala
+max_size_kb = 1024                     # a logfájl ekkora méretnél (KB) új fájlba forgat – méretkorlát
+backup_count = 3                       # ennyi régi (forgatott) logfájlt tart meg; lemezhasználat felső korlátja ~ (backup_count + 1) * max_size_kb
+
+
 [vesz]
 rss_url = "https://www.katasztrofavedelem.hu/10466/RSS_VESZ"
 rss_read_time_min = 10                 # csak use_scheduler = true esetén számít

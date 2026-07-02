@@ -62,6 +62,11 @@ emergency_channel_number = 1          # a vészhelyzeti csatorna indexe (0 = pri
 emergency_channel_name = "vesz_teszt" # a csatorna neve
 time_between_messages_s = 30          # szünet (mp) az egyes hírek küldése között
 
+[log]
+file = "mt_vesz.log"                  # a logfájl neve/útvonala
+max_size_kb = 1024                    # ekkora méretnél (KB) új fájlba forgat – méretkorlát
+backup_count = 3                      # ennyi régi (forgatott) logfájlt tart meg
+
 [vesz]
 rss_url = "https://www.katasztrofavedelem.hu/10466/RSS_VESZ"
 rss_read_time_min = 10                # hírlekérés gyakorisága (perc)
@@ -85,6 +90,19 @@ postfix_text = "hírforrás: BM OKF"    # minden hír végére fűzött szöveg
 | `emergency_channel_name` | A vészhelyzeti csatorna neve. |
 | `time_between_messages_s` | Várakozás másodpercben két hír kiküldése között (a mesh hálózat tehermentesítésére). |
 | `connect_max_retries` | Hány csatlakozási próba után adja fel a program, ha a node nem elérhető. `0` = végtelen újrapróbálkozás (folyamatos/daemon módhoz). Egyszeri/cron módban **állítsd véges értékre** (pl. `10`), különben a node kiesésekor a folyamat végtelenségig lóg, és a cron újabb beragadt folyamatokat halmozna fel. |
+
+### `[log]` szekció
+
+A program a sikeresen kiküldött rádiós üzeneteket és minden hibát naplózza –
+konzolra és egy **méretkorlátos** logfájlba egyaránt. A fájl a `max_size_kb`
+méret elérésekor új fájlba forgat, és legfeljebb `backup_count` régi fájlt tart
+meg (`mt_vesz.log.1`, `.2` …), így a naplók nem nőnek korlátlanul.
+
+| Kulcs | Leírás |
+|---|---|
+| `file` | A logfájl neve/útvonala. |
+| `max_size_kb` | A logfájl mérete ekkora értéknél (KB) új fájlba forgat. |
+| `backup_count` | Ennyi régi (forgatott) logfájlt tart meg. A lemezhasználat felső korlátja nagyjából `(backup_count + 1) * max_size_kb` KB. |
 
 ### `[vesz]` szekció
 
@@ -219,8 +237,10 @@ hogy ugyanaz a hír ne menjen ki kétszer. A fájl a `.gitignore`-ban szerepel.
 | `list_ports.py` | Elérhető soros (USB) portok listázása (Linux/Windows). |
 | `mt_lib.py` | Meshtastic kapcsolatkezelés (TCP/soros), újracsatlakozás, üzenetküldés ACK-kal. |
 | `vesz_lib.py` | RSS-letöltés és cache-kezelés (`BMFeeds` osztály). |
+| `log_setup.py` | A méretkorlátos, forgó logfájl + konzol naplózás beállítása. |
 | `config.toml` | Konfiguráció. |
 | `cache.json` | A már látott hírek (futás közben jön létre). |
+| `mt_vesz.log` | Napló: sikeres küldések és hibák (futás közben jön létre, méretkorlátos). |
 
 ## Hibaelhárítás
 
