@@ -12,6 +12,13 @@ time_between_messages_s = 30
 connect_max_retries = 10              # csatlakozási próbák száma feladás előtt; 0 = végtelen (folyamatos módhoz), >0 ajánlott egyszeri/cron módban
 
 
+[heartbeat]
+# Naponta egyszer (éjfélkor, külső cron időzítővel) küldött "életjel" üzenet,
+# ami azt mutatja, hogy az eszköz működik. A {time} helyére a küldés ideje kerül.
+message = "Az eszköz működik. Időpont: {time}"
+time_format = "%Y-%m-%d %H:%M"
+
+
 [log]
 file = "mt_vesz.log"                   # a logfájl neve/útvonala
 max_size_kb = 1024                     # a logfájl ekkora méretnél (KB) új fájlba forgat – méretkorlát

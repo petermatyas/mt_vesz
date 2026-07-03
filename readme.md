@@ -185,14 +185,16 @@ környezetével). A crontab nem ismeri a `cd`-t, ezért abszolút útvonalakat h
 lépj a projekt könyvtárába, hogy a `config.toml` és a `cache.json` megtalálható legyen:
 
 ```cron
-*/10 * * * * cd /home/pi/mt_vesz && /home/pi/mt_vesz/venv/bin/python main.py >> /home/pi/mt_vesz/cron.log 2>&1
+*/10 * * * * cd $HOME/mt_vesz && $HOME/mt_vesz/venv/bin/python main.py >> $HOME/mt_vesz/cron.log 2>&1
 ```
 
 Magyarázat:
 
 - `*/10 * * * *` — minden 10. percben. (`*/30` = félóránként, `0 * * * *` = óránként.)
-- `cd /home/pi/mt_vesz` — a projekt könyvtára, hogy a relatív útvonalú fájlok (`config.toml`,
-  `cache.json`) elérhetők legyenek.
+- `cd $HOME/mt_vesz` — a projekt könyvtára, hogy a relatív útvonalú fájlok (`config.toml`,
+  `cache.json`) elérhetők legyenek. A `$HOME`-ot a cron a futtató felhasználó saját
+  könyvtárára állítja, így nem kell beégetni a felhasználónevet (feltéve, hogy a projekt
+  a home könyvtárban van; ha máshol, írj abszolút útvonalat).
 - `venv/bin/python main.py` — a virtuális környezet Pythonja (a cron környezetében nincs
   aktivált venv, ezért kell a teljes útvonal).
 - `>> cron.log 2>&1` — a kimenet és a hibák naplózása (hasznos hibakereséshez).
@@ -207,6 +209,22 @@ tail -f cron.log    # a futások élő naplója
 > **Fontos:** két futás ne fusson egyszerre (a node egyszerre egy kapcsolatot kezel jól).
 > Válaszd a `*/10` intervallumot elég nagyra ahhoz, hogy egy futás (kapcsolódás +
 > összes hír kiküldése `time_between_messages_s` szünetekkel) biztosan befejeződjön.
+
+#### Napi életjel (heartbeat.py)
+
+A `heartbeat.py` naponta egyszer egyetlen üzenetet küld, ami azt mutatja, hogy az
+eszköz működik – így a csatorna hallgatói akkor is látják, hogy a rendszer él, ha
+éppen nincs új VESZ-hír. Az üzenet szövegét a `config.toml` `[heartbeat]` szekciója
+adja (a `{time}` helyére a küldés ideje kerül).
+
+Éjfélkori (napi) futtatáshoz add hozzá ezt a sort is a crontabhoz:
+
+```cron
+0 0 * * * cd $HOME/mt_vesz && $HOME/mt_vesz/venv/bin/python heartbeat.py >> $HOME/mt_vesz/cron.log 2>&1
+```
+
+- `0 0 * * *` — minden nap 0 óra 0 perckor (éjfél).
+- A többi tag jelentése azonos a fenti `main.py` sorával.
 
 ### Windows — Feladatütemező
 
