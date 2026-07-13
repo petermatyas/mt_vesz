@@ -71,6 +71,7 @@ backup_count = 3                      # ennyi régi (forgatott) logfájlt tart m
 rss_url = "https://www.katasztrofavedelem.hu/10466/RSS_VESZ"
 rss_read_time_min = 10                # hírlekérés gyakorisága (perc)
 postfix_text = "hírforrás: BM OKF"    # minden hír végére fűzött szöveg
+max_message_length = 200              # a kiküldött üzenet max. hossza karakterben (0 = nincs korlát)
 ```
 
 ### `[general]` szekció
@@ -90,6 +91,9 @@ postfix_text = "hírforrás: BM OKF"    # minden hír végére fűzött szöveg
 | `emergency_channel_name` | A vészhelyzeti csatorna neve. |
 | `time_between_messages_s` | Várakozás másodpercben két hír kiküldése között (a mesh hálózat tehermentesítésére). |
 | `connect_max_retries` | Hány csatlakozási próba után adja fel a program, ha a node nem elérhető. `0` = végtelen újrapróbálkozás (folyamatos/daemon módhoz). Egyszeri/cron módban **állítsd véges értékre** (pl. `10`), különben a node kiesésekor a folyamat végtelenségig lóg, és a cron újabb beragadt folyamatokat halmozna fel. |
+| `wait_for_ack` | `true` esetén a program a küldés után megvárja a nyugtát (ACK). Ha `ack_timeout_s` időn belül nem érkezik, újraküldi az üzenetet. `false` = "tűzd ki és felejtsd el" (nincs ACK-figyelés). |
+| `ack_timeout_s` | Mennyi ideig (másodperc) várjon egy ACK-ra, mielőtt újraküldi az üzenetet. Csak `wait_for_ack = true` esetén számít. |
+| `ack_max_retries` | Legfeljebb hányszor küldje újra az üzenetet, ha nem érkezik ACK. Így egy üzenet összesen legfeljebb `1 + ack_max_retries` alkalommal megy ki. Csak `wait_for_ack = true` esetén számít. |
 
 ### `[log]` szekció
 
@@ -111,6 +115,7 @@ meg (`mt_vesz.log.1`, `.2` …), így a naplók nem nőnek korlátlanul.
 | `rss_url` | A figyelt RSS-hírcsatorna URL-je. |
 | `rss_read_time_min` | Milyen gyakran (percben) kérdezze le újra a hírfolyamot. |
 | `postfix_text` | Minden kiküldött hír végéhez hozzáfűzött szöveg. |
+| `max_message_length` | A kiküldött üzenet maximális hossza karakterben. `0` = nincs korlát. Ha a teljes üzenet (cím + `postfix_text`) hosszabb a korlátnál, a cím végét levágja, `...`-t tesz a helyére, majd a `postfix_text` következik – így az üzenet hossza pontosan a beállított korlát lesz. A `postfix_text` mindig az üzenet végén marad. |
 | `cache_max_entries` | Ha a `cache.json` ennél több bejegyzésre nő, új hír érkezésekor automatikusan lefut a takarítás. `0` = kikapcsolva (korlátlan növekedés). |
 | `cache_clear_time_days` | Takarításkor az ennél régebbi (napban) bejegyzések törlődnek a cache-ből. |
 

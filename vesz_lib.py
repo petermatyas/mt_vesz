@@ -15,11 +15,14 @@ class BMFeeds():
     def __init__(self, rss_url="https://www.katasztrofavedelem.hu/10466/RSS_VESZ",
                  cache_file='cache.json',
                  postfix_text="hírforrás: BM OKF",
+                 max_message_length=0,
                  max_cache_entries=0,
                  clear_time_s=30 * 24 * 3600):
         self.url = rss_url
         self.cache_file = cache_file
         self.postfix_text = postfix_text
+        # A kiküldött üzenet maximális hossza karakterben (0 = nincs korlát).
+        self.max_message_length = max_message_length
         # Ha a cache ennél több bejegyzésre nő, lefut az idő-alapú takarítás
         # (0 = kikapcsolva). A clear_time_s adja meg, milyen régi elemek törlődnek.
         self.max_cache_entries = max_cache_entries
@@ -140,6 +143,30 @@ class BMFeeds():
             self._save_cache()
             logger.info("Takarítás kész: %d elem törölve.", original_len - len(self.cache))
 
+    def _build_message(self, title):
+        """Összeállítja a kiküldendő üzenetet: a cím és a végére fűzött
+        ``postfix_text``. A postfix mindig az üzenet végén marad.
+
+        Ha van hosszkorlát (``max_message_length`` > 0) és a teljes üzenet
+        hosszabb annál, a cím végét levágjuk, három pontot ("...") teszünk a
+        helyére, majd a postfix következik – úgy, hogy az üzenet hossza pontosan
+        a beállított korlát legyen."""
+        full = f"{title} {self.postfix_text}"
+        if not self.max_message_length or len(full) <= self.max_message_length:
+            return full
+
+        # "...<szóköz>postfix" – ez mindenképp az üzenet végén marad.
+        suffix = f"... {self.postfix_text}"
+        keep = self.max_message_length - len(suffix)
+        if keep <= 0:
+            # A korlát még a postfixet (+ "...") sem fedi le – ilyenkor nem tudunk
+            # a korláton belül maradni, de a postfixet nem dobjuk el.
+            logger.warning(
+                "A max_message_length (%d) túl kicsi a postfix_text-hez – "
+                "az üzenet hosszabb lesz a korlátnál.", self.max_message_length)
+            return suffix
+        return f"{title[:keep]}{suffix}"
+
     def getNews(self):
         rawNews = self.download() or []
         news = list()
@@ -147,7 +174,7 @@ class BMFeeds():
             title = i.get('title', '')  # cím nélküli bejegyzés ne dobjon AttributeError-t
             if not title:
                 continue  # cím nélkül nincs értelmes üzenet, kihagyjuk
-            news.append(f"{title} {self.postfix_text}")
+            news.append(self._build_message(title))
         return news
 
 if __name__ == "__main__":

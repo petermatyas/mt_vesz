@@ -42,7 +42,12 @@ def main():
     try:
         message = build_message()
         logger.info("Életjel küldése: %r", message)
-        mt.sendMessage(message)
+        mt.sendMessage(
+            message,
+            wait_for_ack=cfg("meshtastic.wait_for_ack", False),
+            ack_timeout_s=cfg("meshtastic.ack_timeout_s", 30),
+            ack_max_retries=cfg("meshtastic.ack_max_retries", 3),
+        )
     except Exception as e:
         logger.error("Életjel küldése sikertelen: %s", e)
     finally:

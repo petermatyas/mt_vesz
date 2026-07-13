@@ -87,12 +87,20 @@ def job():
 
     logger.info("Új hírek száma: %d", len(news))
     delay = cfg("meshtastic.time_between_messages_s")
+    wait_for_ack = cfg("meshtastic.wait_for_ack", False)
+    ack_timeout_s = cfg("meshtastic.ack_timeout_s", 30)
+    ack_max_retries = cfg("meshtastic.ack_max_retries", 3)
     for idx, i in enumerate(news):
         if idx > 0:
             time.sleep(delay)  # szünet CSAK a hírek között, az utolsó után nem
         logger.info("Hír küldése: %r", i)
         try:
-            mt.sendMessage(i)
+            mt.sendMessage(
+                i,
+                wait_for_ack=wait_for_ack,
+                ack_timeout_s=ack_timeout_s,
+                ack_max_retries=ack_max_retries,
+            )
         except Exception as e:
             logger.error("Hír küldése sikertelen: %s", e)
 
@@ -107,6 +115,7 @@ if __name__ == "__main__":
     feeds = vesz_lib.BMFeeds(
         rss_url=cfg("vesz.rss_url"),
         postfix_text=cfg("vesz.postfix_text"),
+        max_message_length=cfg("vesz.max_message_length", 0),
         max_cache_entries=cfg("vesz.cache_max_entries", 0),
         clear_time_s=cfg("vesz.cache_clear_time_days", 30) * 24 * 3600,
     )

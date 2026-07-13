@@ -10,6 +10,9 @@ emergency_channel_number = 1
 emergency_channel_name = "EMERGENCY"
 time_between_messages_s = 30
 connect_max_retries = 10              # csatlakozási próbák száma feladás előtt; 0 = végtelen (folyamatos módhoz), >0 ajánlott egyszeri/cron módban
+wait_for_ack = false                  # true: küldés után figyeli a nyugtát (ACK), és ha nem érkezik, újraküldi az üzenetet
+ack_timeout_s = 30                    # ennyi másodpercig vár ACK-ra újraküldés előtt (csak wait_for_ack = true esetén)
+ack_max_retries = 3                   # ennyiszer küldi újra az üzenetet, ha nem jön ACK (max. 1 + ack_max_retries küldés)
 
 
 [heartbeat]
@@ -29,6 +32,7 @@ backup_count = 3                       # ennyi régi (forgatott) logfájlt tart 
 rss_url = "https://www.katasztrofavedelem.hu/10466/RSS_VESZ"
 rss_read_time_min = 10                 # csak use_scheduler = true esetén számít
 postfix_text = "hírforrás: BM OKF"
+max_message_length = 200               # a kiküldött üzenet max. hossza karakterben (0 = nincs korlát); túllépéskor a cím végét levágja, "..."-t tesz, és a postfix_text kerül a végére
 cache_max_entries = 500                # ha a cache ennél több bejegyzésre nő, lefut a takarítás (0 = kikapcsolva)
 cache_clear_time_days = 30             # takarításkor az ennél régebbi bejegyzések törlődnek
 
