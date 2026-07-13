@@ -91,9 +91,7 @@ max_message_length = 200              # a kiküldött üzenet max. hossza karakt
 | `emergency_channel_name` | A vészhelyzeti csatorna neve. |
 | `time_between_messages_s` | Várakozás másodpercben két hír kiküldése között (a mesh hálózat tehermentesítésére). |
 | `connect_max_retries` | Hány csatlakozási próba után adja fel a program, ha a node nem elérhető. `0` = végtelen újrapróbálkozás (folyamatos/daemon módhoz). Egyszeri/cron módban **állítsd véges értékre** (pl. `10`), különben a node kiesésekor a folyamat végtelenségig lóg, és a cron újabb beragadt folyamatokat halmozna fel. |
-| `wait_for_ack` | `true` esetén a program a küldés után megvárja a nyugtát (ACK). Ha `ack_timeout_s` időn belül nem érkezik, újraküldi az üzenetet. `false` = "tűzd ki és felejtsd el" (nincs ACK-figyelés). |
-| `ack_timeout_s` | Mennyi ideig (másodperc) várjon egy ACK-ra, mielőtt újraküldi az üzenetet. Csak `wait_for_ack = true` esetén számít. |
-| `ack_max_retries` | Legfeljebb hányszor küldje újra az üzenetet, ha nem érkezik ACK. Így egy üzenet összesen legfeljebb `1 + ack_max_retries` alkalommal megy ki. Csak `wait_for_ack = true` esetén számít. |
+| `want_ack` | `true` esetén a program `wantAck` jelzővel küldi az üzenetet. Broadcastnál (csatornára szórt hír) így **a Meshtastic firmware maga gondoskodik a megbízható újraküldésről**: ha nem hallja az implicit ACK-ot (egy szomszéd node rebroadcastját), a rádió szintjén újraadja a csomagot – de **ugyanazzal a packet ID-val**, amit a vevő node-ok kiszűrnek, így nem keletkezik duplikátum. Ezt a firmware végzi, az alkalmazás **nem** küld újra (az új packet ID-vel duplikátumot okozna a vevőknél). `false` = "tűzd ki és felejtsd el". |
 
 ### `[log]` szekció
 

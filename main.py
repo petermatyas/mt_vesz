@@ -87,20 +87,13 @@ def job():
 
     logger.info("Új hírek száma: %d", len(news))
     delay = cfg("meshtastic.time_between_messages_s")
-    wait_for_ack = cfg("meshtastic.wait_for_ack", False)
-    ack_timeout_s = cfg("meshtastic.ack_timeout_s", 30)
-    ack_max_retries = cfg("meshtastic.ack_max_retries", 3)
+    want_ack = cfg("meshtastic.want_ack", False)
     for idx, i in enumerate(news):
         if idx > 0:
             time.sleep(delay)  # szünet CSAK a hírek között, az utolsó után nem
         logger.info("Hír küldése: %r", i)
         try:
-            mt.sendMessage(
-                i,
-                wait_for_ack=wait_for_ack,
-                ack_timeout_s=ack_timeout_s,
-                ack_max_retries=ack_max_retries,
-            )
+            mt.sendMessage(i, want_ack=want_ack)
         except Exception as e:
             logger.error("Hír küldése sikertelen: %s", e)
 

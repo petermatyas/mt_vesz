@@ -161,15 +161,25 @@ class MtHandler():
             pass
 
 
-    def _send_raw(self, message, channelIndex, hopLimit, max_attempts,
-                  wantAck=False, onResponse=None):
-        """A tényleges rádiós küldés, kapcsolat-szintű újrapróbálkozással.
+    def sendMessage(self, message, channelIndex=None, hopLimit=3, max_attempts=3,
+                    want_ack=False):
+        """Szöveges üzenet küldése, kapcsolat-szintű újrapróbálkozással.
 
-        Kapcsolati hiba (a ``sendText`` kivételt dob) esetén legfeljebb
-        ``max_attempts``-szor próbálkozik, közben újracsatlakozik. Ha minden
-        próba elbukik, az utolsó hibát dobja. Ez a küldés még nem várja meg az
-        ACK-t – azt a hívó ``sendMessage`` intézi a ``wantAck``/``onResponse``
-        segítségével."""
+        Kapcsolati hiba (a ``sendText`` kivételt dob – pl. megszakadt TCP/serial
+        link) esetén legfeljebb ``max_attempts``-szor próbálkozik, közben
+        újracsatlakozik. Ha minden próba elbukik, az utolsó hibát dobja.
+
+        Ha ``want_ack`` igaz, a csomagot ``wantAck`` jelzővel küldi. Broadcast
+        üzenetnél (csatornára szórt hír) ilyenkor **a Meshtastic firmware maga
+        gondoskodik a megbízható újraküldésről**: ha nem hallja az implicit
+        ACK-ot (egy szomszéd node rebroadcastját), a rádió szintjén újraadja a
+        csomagot – de **ugyanazzal a packet ID-val**, amit a vevő node-ok
+        deduplikálnak, így nem keletkezik duplikátum. Ezért NEM küldünk
+        alkalmazás-szinten újra: az csak új packet ID-jú, a vevőknél
+        duplikátumként megjelenő üzeneteket eredményezne."""
+        if channelIndex is None:
+            channelIndex = self.default_channel_index
+
         last_err = None
         for attempt in range(max_attempts):
             self._ensure_connected()
@@ -180,10 +190,9 @@ class MtHandler():
                     text=message,
                     channelIndex=channelIndex,
                     hopLimit=hopLimit,
-                    wantAck=wantAck,
-                    onResponse=onResponse,
+                    wantAck=want_ack,
                 )
-                # Sikeres rádiós küldés – naplózzuk (csatorna + üzenet).
+                # Sikeres átadás a rádiónak – naplózzuk (csatorna + üzenet).
                 logger.info("Üzenet elküldve (csatorna %d): %r", channelIndex, message)
                 return
             except Exception as e:
@@ -195,56 +204,6 @@ class MtHandler():
 
         if last_err is not None:
             raise last_err
-
-    def sendMessage(self, message, channelIndex=None, hopLimit=3, max_attempts=3,
-                    wait_for_ack=False, ack_timeout_s=30, ack_max_retries=3):
-        """Szöveges üzenet küldése.
-
-        Alaphelyzetben "tűzd ki és felejtsd el" (fire-and-forget) módon küld –
-        kapcsolati hiba esetén ``max_attempts``-ig újrapróbálkozik.
-
-        Ha ``wait_for_ack`` igaz, a küldés után legfeljebb ``ack_timeout_s``
-        másodpercig várja a nyugtát (ACK). Ha nem érkezik, az üzenetet
-        újraküldi, összesen legfeljebb ``ack_max_retries`` alkalommal (tehát
-        max. ``1 + ack_max_retries`` küldés). ACK megérkezésekor azonnal visszatér.
-        """
-        if channelIndex is None:
-            channelIndex = self.default_channel_index
-
-        if not wait_for_ack:
-            self._send_raw(message, channelIndex, hopLimit, max_attempts)
-            return
-
-        total_sends = 1 + max(0, ack_max_retries)
-        for send_no in range(total_sends):
-            ack_event = threading.Event()
-            ack_state = {"acked": False}
-
-            def _on_response(packet, _event=ack_event, _state=ack_state):
-                # A meshtastic a nyugtát ROUTING_APP válaszként adja vissza; a
-                # hibaok hiánya vagy NONE értéke jelenti a sikeres ACK-t.
-                try:
-                    routing = packet.get("decoded", {}).get("routing", {})
-                    err = routing.get("errorReason", "NONE")
-                except AttributeError:
-                    err = "NONE"
-                _state["acked"] = err in (None, "NONE", 0)
-                _event.set()
-
-            self._send_raw(message, channelIndex, hopLimit, max_attempts,
-                           wantAck=True, onResponse=_on_response)
-
-            if ack_event.wait(timeout=ack_timeout_s) and ack_state["acked"]:
-                logger.info("ACK megérkezett (csatorna %d, %d. küldés): %r",
-                            channelIndex, send_no + 1, message)
-                return
-
-            if send_no + 1 < total_sends:
-                logger.warning(
-                    "Nem érkezett ACK %d s alatt – újraküldés (%d/%d): %r",
-                    ack_timeout_s, send_no + 1, ack_max_retries, message)
-
-        logger.error("Nem érkezett ACK %d küldés után sem: %r", total_sends, message)
 
 class MtSerialHandler(MtHandler):
     def __init__(self, port='/dev/ttyUSB0', **kwargs):
