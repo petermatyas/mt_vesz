@@ -21,10 +21,11 @@ time_format = "%Y-%m-%d %H:%M"
 
 
 [read_messages]
-# A node-on várakozó üzenetek kiolvasása (read_messages.py), hogy a node
-# üzenetsora ne fusson tele. A csatlakozás után ennyi ideig fogadja a node által
-# kiadott csomagokat, majd lecsatlakozik.
-listen_time_s = 15
+# A node-on tárolt üzenetek kiolvasása (read_messages.py), hogy a node
+# üzenetsora ne fusson tele. A kapcsolat csak addig áll fenn, amíg a node kiadja
+# a tárolt csomagjait.
+drain_quiet_s = 3                      # ennyi másodpercnyi csend után tekintjük kiürültnek a node üzenetsorát
+max_listen_time_s = 30                 # felső időkorlát: folyamatos forgalom esetén se ragadjon be a futás
 
 
 [log]

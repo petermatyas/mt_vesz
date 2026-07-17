@@ -97,7 +97,8 @@ max_message_length = 200              # a kiküldött üzenet max. hossza karakt
 
 | Kulcs | Leírás |
 |---|---|
-| `listen_time_s` | A `read_messages.py` a csatlakozás után ennyi másodpercig fogadja a node által kiadott, sorban álló üzeneteket, majd lecsatlakozik. Néhány másodperc általában elég (a firmware a kapcsolat felépítésekor egyben kiadja a tárolt csomagokat); nagyon forgalmas hálózaton érdemes növelni. |
+| `drain_quiet_s` | A node a tárolt csomagokat egy sorozatban adja ki. Ha ennyi másodpercig nem jön újabb csomag, a sorozatot befejezettnek tekintjük (a sor kiürült), és a program lecsatlakozik. |
+| `max_listen_time_s` | Felső időkorlát az olvasásra. Folyamatos rádióforgalom esetén a „csend” sosem állna be, ezért ennyi másodperc után a program mindenképp lecsatlakozik — így cron alatt nem ragad be a futás. A ki nem olvasott maradék a következő futáskor jön. |
 
 ### `[log]` szekció
 
@@ -235,17 +236,28 @@ adja (a `{time}` helyére a küldés ideje kerül).
 - `0 0 * * *` — minden nap 0 óra 0 perckor (éjfél).
 - A többi tag jelentése azonos a fenti `main.py` sorával.
 
-#### A node üzenetsorának ürítése (read_messages.py)
+#### A node tárolt üzeneteinek kiolvasása (read_messages.py)
 
 A Meshtastic firmware a rádión vett csomagokat egy belső sorban tárolja a
 csatlakozó kliens (telefonos app vagy API-kliens) számára. Ha soha senki nem
 olvassa ki őket — márpedig ez a rendszer alapesetben csak *küld* —, a sor tele
-fut, és a node memóriája fogy. Amint egy kliens csatlakozik, a firmware kiadja
-neki a tárolt csomagokat, és a sor felszabadul.
+fut, és a legrégebbi csomagok elvesznek. Amint egy kliens csatlakozik, a firmware
+egy sorozatban kiadja neki a tárolt csomagokat, és a sor felszabadul.
 
-A `read_messages.py` ezt végzi: csatlakozik, `listen_time_s` másodpercig fogadja
-és a logfájlba írja a vett szöveges üzeneteket, majd lecsatlakozik. Nem küld
-semmit, és a csatorna-konfigurációt sem írja.
+A `read_messages.py` ezt végzi: csatlakozik, kiolvassa és a logfájlba írja a
+node-on **tárolt** üzeneteket, majd — amint a sor kiürült — lecsatlakozik. Nem
+küld semmit, és a csatorna-konfigurációt sem írja.
+
+A protokoll nem jelöli meg, hogy egy csomag a sorból jött-e vagy épp most
+érkezett, ezért a program a csomag `rxTime` (vételi idő) mezője alapján válogat:
+a csatlakozás megkezdése **előtt** vett csomagok a tárolt üzenetek — ezek kerülnek
+a naplóba. Ami olvasás közben, élőben érkezik, az nem tárolt üzenet: azt a program
+csak megszámolja (a napló összegző sorában látszik).
+
+> **Megjegyzés:** ha a node órája nincs beállítva (nincs GPS/idő-szinkron), az
+> `rxTime` hiányozhat. Ilyenkor a program tárolt üzenetként naplózza a csomagot —
+> inkább jelenjen meg feleslegesen, mint hogy kimaradjon. A node memóriája
+> ettől függetlenül felszabadul, mert a sort a csatlakozás üríti.
 
 ```bash
 python read_messages.py
@@ -288,7 +300,7 @@ hogy ugyanaz a hír ne menjen ki kétszer. A fájl a `.gitignore`-ban szerepel.
 | `main.py` | Belépési pont: kapcsolódás, ütemezés, hírküldés. |
 | `setup_channel.py` | A vészhelyzeti csatorna egyszeri beállítása a node-on. |
 | `heartbeat.py` | Napi „életjel” üzenet küldése a csatornára. |
-| `read_messages.py` | A node-on várakozó üzenetek kiolvasása (naplózás), a node memóriájának felszabadítására. |
+| `read_messages.py` | A node-on tárolt üzenetek kiolvasása (naplózás), a node memóriájának felszabadítására. |
 | `list_ports.py` | Elérhető soros (USB) portok listázása (Linux/Windows). |
 | `mt_lib.py` | Meshtastic kapcsolatkezelés (TCP/soros), újracsatlakozás, üzenetküldés ACK-kal. |
 | `vesz_lib.py` | RSS-letöltés és cache-kezelés (`BMFeeds` osztály). |
