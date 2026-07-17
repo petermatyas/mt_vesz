@@ -93,6 +93,12 @@ max_message_length = 200              # a kiküldött üzenet max. hossza karakt
 | `connect_max_retries` | Hány csatlakozási próba után adja fel a program, ha a node nem elérhető. `0` = végtelen újrapróbálkozás (folyamatos/daemon módhoz). Egyszeri/cron módban **állítsd véges értékre** (pl. `10`), különben a node kiesésekor a folyamat végtelenségig lóg, és a cron újabb beragadt folyamatokat halmozna fel. |
 | `want_ack` | `true` esetén a program `wantAck` jelzővel küldi az üzenetet. Broadcastnál (csatornára szórt hír) így **a Meshtastic firmware maga gondoskodik a megbízható újraküldésről**: ha nem hallja az implicit ACK-ot (egy szomszéd node rebroadcastját), a rádió szintjén újraadja a csomagot – de **ugyanazzal a packet ID-val**, amit a vevő node-ok kiszűrnek, így nem keletkezik duplikátum. Ezt a firmware végzi, az alkalmazás **nem** küld újra (az új packet ID-vel duplikátumot okozna a vevőknél). `false` = "tűzd ki és felejtsd el". |
 
+### `[read_messages]` szekció
+
+| Kulcs | Leírás |
+|---|---|
+| `listen_time_s` | A `read_messages.py` a csatlakozás után ennyi másodpercig fogadja a node által kiadott, sorban álló üzeneteket, majd lecsatlakozik. Néhány másodperc általában elég (a firmware a kapcsolat felépítésekor egyben kiadja a tárolt csomagokat); nagyon forgalmas hálózaton érdemes növelni. |
+
 ### `[log]` szekció
 
 A program a sikeresen kiküldött rádiós üzeneteket és minden hibát naplózza –
@@ -229,6 +235,32 @@ adja (a `{time}` helyére a küldés ideje kerül).
 - `0 0 * * *` — minden nap 0 óra 0 perckor (éjfél).
 - A többi tag jelentése azonos a fenti `main.py` sorával.
 
+#### A node üzenetsorának ürítése (read_messages.py)
+
+A Meshtastic firmware a rádión vett csomagokat egy belső sorban tárolja a
+csatlakozó kliens (telefonos app vagy API-kliens) számára. Ha soha senki nem
+olvassa ki őket — márpedig ez a rendszer alapesetben csak *küld* —, a sor tele
+fut, és a node memóriája fogy. Amint egy kliens csatlakozik, a firmware kiadja
+neki a tárolt csomagokat, és a sor felszabadul.
+
+A `read_messages.py` ezt végzi: csatlakozik, `listen_time_s` másodpercig fogadja
+és a logfájlba írja a vett szöveges üzeneteket, majd lecsatlakozik. Nem küld
+semmit, és a csatorna-konfigurációt sem írja.
+
+```bash
+python read_messages.py
+```
+
+Óránkénti futtatáshoz a crontabba:
+
+```cron
+30 * * * * cd $HOME/mt_vesz && $HOME/mt_vesz/venv/bin/python read_messages.py >> $HOME/mt_vesz/cron.log 2>&1
+```
+
+- `30 * * * *` — minden óra 30. percében. Az eltolás szándékos: így nem esik egybe
+  a `main.py` (`*/10`) futásaival — a node egyszerre egy kapcsolatot kezel jól.
+- A kiolvasott üzenetek a `[log] file` szerinti logfájlba (`mt_vesz.log`) kerülnek.
+
 ### Windows — Feladatütemező
 
 Egyszeri módban Windowson a Feladatütemezővel (Task Scheduler) ütemezhető:
@@ -255,6 +287,8 @@ hogy ugyanaz a hír ne menjen ki kétszer. A fájl a `.gitignore`-ban szerepel.
 |---|---|
 | `main.py` | Belépési pont: kapcsolódás, ütemezés, hírküldés. |
 | `setup_channel.py` | A vészhelyzeti csatorna egyszeri beállítása a node-on. |
+| `heartbeat.py` | Napi „életjel” üzenet küldése a csatornára. |
+| `read_messages.py` | A node-on várakozó üzenetek kiolvasása (naplózás), a node memóriájának felszabadítására. |
 | `list_ports.py` | Elérhető soros (USB) portok listázása (Linux/Windows). |
 | `mt_lib.py` | Meshtastic kapcsolatkezelés (TCP/soros), újracsatlakozás, üzenetküldés ACK-kal. |
 | `vesz_lib.py` | RSS-letöltés és cache-kezelés (`BMFeeds` osztály). |

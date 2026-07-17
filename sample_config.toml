@@ -20,6 +20,13 @@ message = "Az eszköz működik. Időpont: {time}"
 time_format = "%Y-%m-%d %H:%M"
 
 
+[read_messages]
+# A node-on várakozó üzenetek kiolvasása (read_messages.py), hogy a node
+# üzenetsora ne fusson tele. A csatlakozás után ennyi ideig fogadja a node által
+# kiadott csomagokat, majd lecsatlakozik.
+listen_time_s = 15
+
+
 [log]
 file = "mt_vesz.log"                   # a logfájl neve/útvonala
 max_size_kb = 1024                     # a logfájl ekkora méretnél (KB) új fájlba forgat – méretkorlát
