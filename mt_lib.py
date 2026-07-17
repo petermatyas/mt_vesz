@@ -6,12 +6,59 @@ import time
 import meshtastic
 import meshtastic.serial_interface, meshtastic.tcp_interface
 
-from meshtastic.protobuf import channel_pb2
+from meshtastic.protobuf import channel_pb2, portnums_pb2
 
 from pubsub import pub
 
 
 logger = logging.getLogger(__name__)
+
+
+class _AckWaiter:
+    """Egyetlen küldés nyugtájára (ACK / NAK) vár.
+
+    A meshtastic könyvtár a saját olvasó szálán hívja az ``on_ack_nak``
+    callbacket, amikor a küldött csomag packet ID-jára hivatkozó "routing"
+    csomag megérkezik. Az eredményt egy ``threading.Event``-en keresztül adjuk
+    át a küldő szálnak.
+    """
+
+    # Lehetséges eredmények
+    ACK = "ack"                    # egy másik node visszaigazolta a vételt
+    IMPLICIT_ACK = "implicit_ack"  # egy szomszéd továbbadta (rebroadcast) a csomagot
+    NAK = "nak"                    # a hálózat feladta a kézbesítést
+
+    def __init__(self, local_node_num=None):
+        # A saját node számunk kell az implicit ACK felismeréséhez; ha nem
+        # ismerjük, nem tudjuk megkülönböztetni a valódi ACK-tól.
+        self.local_node_num = local_node_num
+        self.result = None
+        self.error_reason = None
+        self._event = threading.Event()
+
+    def on_ack_nak(self, packet=None):
+        try:
+            routing = ((packet or {}).get("decoded") or {}).get("routing") or {}
+            reason = routing.get("errorReason", "NONE")
+            if reason != "NONE":
+                self.result = self.NAK
+                self.error_reason = reason
+            elif (self.local_node_num is not None
+                    and int(packet.get("from", -1)) == self.local_node_num):
+                # A saját node-unk küldte a nyugtát: hallotta, hogy egy szomszéd
+                # megismételte a csomagot.
+                self.result = self.IMPLICIT_ACK
+            else:
+                self.result = self.ACK
+        except Exception as e:
+            logger.error("A nyugta feldolgozása sikertelen: %s", e)
+        finally:
+            self._event.set()
+
+    def wait(self, timeout_s):
+        """Megvárja a nyugtát; visszaadja az eredményt, vagy None, ha időtúllépés."""
+        self._event.wait(timeout_s)
+        return self.result
 
 
 class MtHandler():
@@ -161,40 +208,38 @@ class MtHandler():
             pass
 
 
-    def sendMessage(self, message, channelIndex=None, hopLimit=3, max_attempts=3,
-                    want_ack=False):
-        """Szöveges üzenet küldése, kapcsolat-szintű újrapróbálkozással.
+    def _send_raw(self, message, channelIndex, hopLimit, max_attempts,
+                  want_ack=False, on_response=None):
+        """A tényleges rádiós küldés, kapcsolat-szintű újrapróbálkozással.
 
-        Kapcsolati hiba (a ``sendText`` kivételt dob – pl. megszakadt TCP/serial
-        link) esetén legfeljebb ``max_attempts``-szor próbálkozik, közben
+        Kapcsolati hiba (a küldés kivételt dob – pl. megszakadt TCP/serial link)
+        esetén legfeljebb ``max_attempts``-szor próbálkozik, közben
         újracsatlakozik. Ha minden próba elbukik, az utolsó hibát dobja.
+        A nyugtát nem várja meg – azt a hívó ``sendMessage`` intézi.
 
-        Ha ``want_ack`` igaz, a csomagot ``wantAck`` jelzővel küldi. Broadcast
-        üzenetnél (csatornára szórt hír) ilyenkor **a Meshtastic firmware maga
-        gondoskodik a megbízható újraküldésről**: ha nem hallja az implicit
-        ACK-ot (egy szomszéd node rebroadcastját), a rádió szintjén újraadja a
-        csomagot – de **ugyanazzal a packet ID-val**, amit a vevő node-ok
-        deduplikálnak, így nem keletkezik duplikátum. Ezért NEM küldünk
-        alkalmazás-szinten újra: az csak új packet ID-jú, a vevőknél
-        duplikátumként megjelenő üzeneteket eredményezne."""
-        if channelIndex is None:
-            channelIndex = self.default_channel_index
+        Visszaadja az elküldött csomagot (az ``id`` mezőben a packet ID-val).
 
+        A magasabb szintű ``sendText`` helyett ``sendData``-t hívunk, mert csak
+        ez ismeri az ``onResponseAckPermitted`` kapcsolót: enélkül a könyvtár a
+        sikeres ACK-okat eldobná, és csak a NAK-ot adná át a callbacknek."""
         last_err = None
         for attempt in range(max_attempts):
             self._ensure_connected()
             gen = self._generation
 
             try:
-                self.interface.sendText(
-                    text=message,
+                packet = self.interface.sendData(
+                    message.encode("utf-8"),
+                    portNum=portnums_pb2.PortNum.TEXT_MESSAGE_APP,
                     channelIndex=channelIndex,
                     hopLimit=hopLimit,
                     wantAck=want_ack,
+                    onResponse=on_response,
+                    onResponseAckPermitted=True,
                 )
                 # Sikeres átadás a rádiónak – naplózzuk (csatorna + üzenet).
                 logger.info("Üzenet elküldve (csatorna %d): %r", channelIndex, message)
-                return
+                return packet
             except Exception as e:
                 last_err = e
                 logger.error("Failed to send message (attempt %d/%d): %s",
@@ -204,6 +249,81 @@ class MtHandler():
 
         if last_err is not None:
             raise last_err
+
+    def _local_node_num(self):
+        """A saját node száma (az implicit ACK felismeréséhez), vagy None."""
+        try:
+            return self.interface.localNode.nodeNum
+        except Exception:
+            return None
+
+    def _drop_response_handler(self, packet):
+        """A nyugtára váró callback eldobása időtúllépés után.
+
+        Ha a nyugta sosem érkezik meg, a könyvtár a callbacket a packet ID-hoz
+        rendelve megtartaná – folyamatos (schedule) módban ez korlátlanul nőne."""
+        try:
+            self.interface.responseHandlers.pop(packet.id, None)
+        except Exception:
+            pass
+
+    def sendMessage(self, message, channelIndex=None, hopLimit=3, max_attempts=3,
+                    want_ack=False, ack_timeout_s=30, ack_max_retries=2):
+        """Szöveges üzenet küldése.
+
+        Ha ``want_ack`` hamis: "tűzd ki és felejtsd el" – csak kapcsolati hiba
+        esetén próbálkozik újra (``max_attempts``).
+
+        Ha ``want_ack`` igaz, a csomag ``wantAck`` jelzővel megy ki, és a küldés
+        megvárja a nyugtát, legfeljebb ``ack_timeout_s`` másodpercig. Nyugta
+        (vagy NAK) hiányában az üzenetet újraküldi, összesen legfeljebb
+        ``ack_max_retries`` alkalommal (tehát max. ``1 + ack_max_retries``
+        küldés). A nyugta háromféle lehet:
+
+        - ACK: egy másik node visszaigazolta a vételt (csak címzett üzenetnél).
+        - implicit ACK: broadcastnál (csatornára szórt hír) ez az egyetlen
+          elérhető pozitív jelzés – a node hallotta, hogy egy szomszéd
+          továbbadta a csomagot. Nem garancia a kézbesítésre, de azt mutatja,
+          hogy az üzenet kijutott a mesh-be.
+        - NAK: a firmware feladta a kézbesítést (``errorReason`` az okot adja).
+
+        FIGYELEM: az újraküldés **új packet ID-t** kap, amit a vevő node-ok nem
+        deduplikálnak – ha az eredeti üzenet mégis megérkezett (csak a nyugta
+        veszett el), a hallgatóknál duplikátum jelenhet meg. Ezért tartsd az
+        ``ack_max_retries`` értékét alacsonyan. A firmware saját, packet ID
+        szintű újraadása ettől függetlenül, duplikátum nélkül működik."""
+        if channelIndex is None:
+            channelIndex = self.default_channel_index
+
+        if not want_ack:
+            self._send_raw(message, channelIndex, hopLimit, max_attempts)
+            return
+
+        total_rounds = 1 + max(0, ack_max_retries)
+        for round_no in range(1, total_rounds + 1):
+            waiter = _AckWaiter(self._local_node_num())
+            packet = self._send_raw(message, channelIndex, hopLimit, max_attempts,
+                                    want_ack=True, on_response=waiter.on_ack_nak)
+
+            result = waiter.wait(ack_timeout_s)
+
+            if result == _AckWaiter.ACK:
+                logger.info("Nyugta megérkezett (ACK): a címzett vette az üzenetet.")
+                return
+            if result == _AckWaiter.IMPLICIT_ACK:
+                logger.info("Implicit nyugta: egy szomszéd node továbbadta az üzenetet "
+                            "(a kézbesítés valószínű, de nem garantált).")
+                return
+            if result == _AckWaiter.NAK:
+                logger.warning("A hálózat elutasította az üzenetet (NAK, ok: %s) "
+                               "[%d/%d próba].", waiter.error_reason, round_no, total_rounds)
+            else:
+                self._drop_response_handler(packet)
+                logger.warning("Nem érkezett nyugta %d másodpercen belül [%d/%d próba].",
+                               ack_timeout_s, round_no, total_rounds)
+
+        logger.error("Az üzenet %d próbálkozás után sem kapott nyugtát: %r",
+                     total_rounds, message)
 
 class MtSerialHandler(MtHandler):
     def __init__(self, port='/dev/ttyUSB0', **kwargs):

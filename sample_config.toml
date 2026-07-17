@@ -10,7 +10,10 @@ emergency_channel_number = 1
 emergency_channel_name = "EMERGENCY"
 time_between_messages_s = 30
 connect_max_retries = 10              # csatlakozási próbák száma feladás előtt; 0 = végtelen (folyamatos módhoz), >0 ajánlott egyszeri/cron módban
-want_ack = true                       # true: wantAck jelzővel küld, így a firmware megbízhatóan (packet-ID alapon, dedup-olva) újraadja a csomagot, ha nincs implicit ACK – NEM keletkezik duplikátum a vevőknél
+want_ack = true                       # true: wantAck jelzővel küld, megvárja a nyugtát, és nyugta híján újraküld (lásd ack_timeout_s / ack_max_retries); false: "tűzd ki és felejtsd el"
+ack_timeout_s = 30                    # ennyi másodpercig várja a nyugtát (ACK/NAK) egy küldés után
+ack_max_retries = 2                   # nyugta híján ennyiszer küldi újra (0 = nincs újraküldés, csak naplózás); összesen max. 1 + ack_max_retries küldés
+                                      # FIGYELEM: az újraküldés új packet ID-t kap, amit a vevők NEM deduplikálnak – ha csak a nyugta veszett el, a hallgatóknál duplikátum jelenhet meg. Tartsd alacsonyan!
 
 
 [heartbeat]

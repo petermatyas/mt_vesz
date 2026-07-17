@@ -91,7 +91,9 @@ max_message_length = 200              # a kiküldött üzenet max. hossza karakt
 | `emergency_channel_name` | A vészhelyzeti csatorna neve. |
 | `time_between_messages_s` | Várakozás másodpercben két hír kiküldése között (a mesh hálózat tehermentesítésére). |
 | `connect_max_retries` | Hány csatlakozási próba után adja fel a program, ha a node nem elérhető. `0` = végtelen újrapróbálkozás (folyamatos/daemon módhoz). Egyszeri/cron módban **állítsd véges értékre** (pl. `10`), különben a node kiesésekor a folyamat végtelenségig lóg, és a cron újabb beragadt folyamatokat halmozna fel. |
-| `want_ack` | `true` esetén a program `wantAck` jelzővel küldi az üzenetet. Broadcastnál (csatornára szórt hír) így **a Meshtastic firmware maga gondoskodik a megbízható újraküldésről**: ha nem hallja az implicit ACK-ot (egy szomszéd node rebroadcastját), a rádió szintjén újraadja a csomagot – de **ugyanazzal a packet ID-val**, amit a vevő node-ok kiszűrnek, így nem keletkezik duplikátum. Ezt a firmware végzi, az alkalmazás **nem** küld újra (az új packet ID-vel duplikátumot okozna a vevőknél). `false` = "tűzd ki és felejtsd el". |
+| `want_ack` | `true` esetén a program `wantAck` jelzővel küldi az üzenetet, **megvárja a nyugtát**, és annak hiányában újraküld (lásd lentebb). `false` = „tűzd ki és felejtsd el”: a küldés után azonnal továbblép, és nem tudja meg, kiment-e az üzenet. |
+| `ack_timeout_s` | Egy küldés után ennyi másodpercig várja a nyugtát (ACK/NAK). |
+| `ack_max_retries` | Nyugta híján ennyiszer küldi újra az üzenetet (összesen max. `1 + ack_max_retries` küldés). `0` = nincs újraküldés, a program csak naplózza a nyugta hiányát. |
 
 ### `[read_messages]` szekció
 
@@ -123,6 +125,33 @@ meg (`mt_vesz.log.1`, `.2` …), így a naplók nem nőnek korlátlanul.
 | `max_message_length` | A kiküldött üzenet maximális hossza karakterben. `0` = nincs korlát. Ha a teljes üzenet (cím + `postfix_text`) hosszabb a korlátnál, a cím végét levágja, `...`-t tesz a helyére, majd a `postfix_text` következik – így az üzenet hossza pontosan a beállított korlát lesz. A `postfix_text` mindig az üzenet végén marad. |
 | `cache_max_entries` | Ha a `cache.json` ennél több bejegyzésre nő, új hír érkezésekor automatikusan lefut a takarítás. `0` = kikapcsolva (korlátlan növekedés). |
 | `cache_clear_time_days` | Takarításkor az ennél régebbi (napban) bejegyzések törlődnek a cache-ből. |
+
+#### Visszajelzés a küldésről (nyugta / ACK)
+
+`want_ack = true` esetén a program megvárja, hogy a küldött csomag packet ID-jára
+érkezzen visszajelzés, és az eredményt naplózza. Háromféle nyugta lehetséges:
+
+| Nyugta | Mit jelent | Napló |
+|---|---|---|
+| **Implicit ACK** | A node hallotta, hogy egy szomszéd node továbbadta (rebroadcast) a csomagot. **Broadcastnál — vagyis a hírküldésnél — ez az egyetlen elérhető pozitív jelzés.** Azt bizonyítja, hogy az üzenet kijutott a mesh-be; azt nem, hogy egy konkrét hallgató megkapta. | `Implicit nyugta: egy szomszéd node továbbadta az üzenetet` |
+| **ACK** | Egy másik node visszaigazolta a vételt. Ez csak **címzett** (egy adott node-nak küldött) üzenetnél fordul elő, a csatornára szórt híreknél nem. | `Nyugta megérkezett (ACK)` |
+| **NAK** | A firmware feladta a kézbesítést (az `errorReason` adja az okot, pl. nincs útvonal). | `A hálózat elutasította az üzenetet (NAK, ok: …)` |
+
+Ha `ack_timeout_s` alatt egyik sem érkezik (vagy NAK jön), a program újraküldi az
+üzenetet, legfeljebb `ack_max_retries` alkalommal. Ha az összes próba elfogy, ezt
+naplózza, és a következő hírre lép — a futás nem áll meg.
+
+> **Figyelem a duplikátumokról:** az újraküldött üzenet **új packet ID-t** kap, amit a
+> vevő node-ok **nem** deduplikálnak. Ha az eredeti üzenet valójában megérkezett, és
+> csak a nyugta veszett el, a hallgatóknál ugyanaz a hír kétszer jelenik meg. Ezért
+> tartsd az `ack_max_retries` értékét alacsonyan (`2` vagy kevesebb). A firmware saját
+> újraadása ettől független: az **ugyanazzal a packet ID-val** megy ki, amit a vevők
+> kiszűrnek, tehát az sosem okoz duplikátumot.
+
+> **Figyelem az időzítésre:** `want_ack = true` mellett egy üzenet küldése a
+> legrosszabb esetben `(1 + ack_max_retries) × ack_timeout_s` másodpercig tart (az
+> alapértékekkel 90 mp). Több hír esetén ehhez jön a `time_between_messages_s` szünet
+> is. Cron alatt ügyelj rá, hogy ez beleférjen a futások közti időbe.
 
 > **Megjegyzés a csatornáról:** a `setup_channel.py` a kiválasztott csatornát a
 > `psk='AQ=='` (alapértelmezett, nyilvános kulcs), `uplink_enabled=False`,
@@ -317,5 +346,11 @@ hogy ugyanaz a hír ne menjen ki kétszer. A fájl a `.gitignore`-ban szerepel.
   blokkol, amíg sikerül.
 - **Nem mennek ki hírek, „Töröld a cache.json-t!”:** minden aktuális hír már a cache-ben
   van. Töröld a `cache.json`-t, ha újra ki akarod küldeni őket. A main.py újraindítása szükséges!
-- **Hír nem lett kézbesítve (nincs ACK):** a node valószínűleg egyedül van, vagy nincs
-  vétel. A program ilyenkor a következő hírre lép.
+- **„Nem érkezett nyugta … próba” a naplóban:** a node nem hallotta, hogy bármelyik
+  szomszéd továbbadta volna a csomagot – valószínűleg egyedül van a hatótávolságában,
+  vagy nincs vétel. A program a beállított `ack_max_retries`-ig újrapróbálja, majd a
+  következő hírre lép. Ha a node tényleg magában van, `want_ack = false`-szal
+  gyorsabban lefut a küldés (visszajelzés nélkül).
+- **Ugyanaz a hír kétszer jelenik meg a hallgatóknál:** az újraküldés új packet ID-t kap,
+  amit a vevők nem szűrnek ki. Csökkentsd az `ack_max_retries` értékét (vagy `0`-ra
+  állítva csak naplózza a nyugta hiányát, újraküldés nélkül).
