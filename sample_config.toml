@@ -14,6 +14,7 @@ want_ack = true                       # true: wantAck jelzővel küld, megvárja
 ack_timeout_s = 30                    # ennyi másodpercig várja a nyugtát (ACK/NAK) egy küldés után
 ack_max_retries = 2                   # nyugta híján ennyiszer küldi újra (0 = nincs újraküldés, csak naplózás); összesen max. 1 + ack_max_retries küldés
                                       # FIGYELEM: az újraküldés új packet ID-t kap, amit a vevők NEM deduplikálnak – ha csak a nyugta veszett el, a hallgatóknál duplikátum jelenhet meg. Tartsd alacsonyan!
+hop_limit = 3                         # az üzenet hányszor mehet tovább más node-okon keresztül (Meshtastic alapértelmezés: 3)
 
 
 [heartbeat]
