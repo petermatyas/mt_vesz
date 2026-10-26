@@ -61,6 +61,7 @@ host = "192.168.0.182"                # TCP kapcsolat esetén a node IP-címe
 emergency_channel_number = 1          # a vészhelyzeti csatorna indexe (0 = primary)
 emergency_channel_name = "vesz_teszt" # a csatorna neve
 time_between_messages_s = 30          # szünet (mp) az egyes hírek küldése között
+node_info_broadcast_secs = 4294967295 # NodeInfo-ismétlési időköz másodpercben (min. 3600, max. 4294967295)
 
 [log]
 file = "mt_vesz.log"                  # a logfájl neve/útvonala
@@ -92,6 +93,7 @@ url_shortener = "is.gd"               # "is.gd" / "v.gd" / "tinyurl"; "" = rövi
 | `emergency_channel_number` | A módosítandó csatorna indexe. `0` a primary csatorna, `1`–`7` a secondary csatornák. |
 | `emergency_channel_name` | A vészhelyzeti csatorna neve. |
 | `time_between_messages_s` | Várakozás másodpercben két hír kiküldése között (a mesh hálózat tehermentesítésére). |
+| `node_info_broadcast_secs` | A node saját NodeInfo-adatainak periodikus hirdetési időköze másodpercben. Minimum `3600` (1 óra), maximum `4294967295`; az alapérték a maximum, így alapértelmezés szerint a lehető legritkábban hirdet. A beállítást a `setup_channel.py` menti a node-ra. |
 | `connect_max_retries` | Hány csatlakozási próba után adja fel a program, ha a node nem elérhető. `0` = végtelen újrapróbálkozás (folyamatos/daemon módhoz). Egyszeri/cron módban **állítsd véges értékre** (pl. `10`), különben a node kiesésekor a folyamat végtelenségig lóg, és a cron újabb beragadt folyamatokat halmozna fel. |
 | `want_ack` | `true` esetén a program `wantAck` jelzővel küldi az üzenetet, **megvárja a nyugtát**, és annak hiányában újraküld (lásd lentebb). `false` = „tűzd ki és felejtsd el”: a küldés után azonnal továbblép, és nem tudja meg, kiment-e az üzenet. |
 | `ack_timeout_s` | Egy küldés után ennyi másodpercig várja a nyugtát (ACK/NAK). |
@@ -159,8 +161,10 @@ naplózza, és a következő hírre lép — a futás nem áll meg.
 
 > **Megjegyzés a csatornáról:** a `setup_channel.py` a kiválasztott csatornát a
 > `psk='AQ=='` (alapértelmezett, nyilvános kulcs), `uplink_enabled=False`,
-> `downlink_enabled=True` beállításokkal hozza létre. Ha titkosított, zárt csatornát
-> szeretnél, módosítsd a `psk` értékét a `setup_channel.py`-ben.
+> `downlink_enabled=True` beállításokkal hozza létre, és a NodeInfo periodikus
+> küldési időközét a `node_info_broadcast_secs` konfigurációs értékre állítja.
+> Ha titkosított, zárt csatornát szeretnél, módosítsd a `psk` értékét a
+> `setup_channel.py`-ben.
 
 ## Használat
 
@@ -173,8 +177,8 @@ létrehozza/beállítja a vészhelyzeti csatornát a node-on, majd kilép:
 python setup_channel.py
 ```
 
-Ezt csak akkor kell újrafuttatni, ha a csatorna beállításait (`[meshtastic]`
-szekció: index, név) módosítod.
+Ezt akkor futtasd újra, ha a csatorna beállításait (`[meshtastic]`
+szekció: index, név) vagy a NodeInfo küldési időközét módosítanád.
 
 ### 2. Hírküldés
 

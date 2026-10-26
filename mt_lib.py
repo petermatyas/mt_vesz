@@ -13,6 +13,9 @@ from pubsub import pub
 
 logger = logging.getLogger(__name__)
 
+MIN_NODE_INFO_BROADCAST_SECS = 3600
+MAX_NODE_INFO_BROADCAST_SECS = 0xFFFFFFFF
+
 
 class _AckWaiter:
     """Egyetlen küldés nyugtájára (ACK / NAK) vár.
@@ -193,6 +196,19 @@ class MtHandler():
 
         node.writeChannel(edit_channel)
         #print(node.channels)
+
+    def setNodeInfoBroadcastInterval(self, interval_s):
+        if type(interval_s) is not int:
+            raise ValueError("A NodeInfo-küldési időköznek egész számnak kell lennie.")
+        if not MIN_NODE_INFO_BROADCAST_SECS <= interval_s <= MAX_NODE_INFO_BROADCAST_SECS:
+            raise ValueError(
+                "A NodeInfo-küldési időköznek 3600 és "
+                f"{MAX_NODE_INFO_BROADCAST_SECS} másodperc közé kell esnie."
+            )
+
+        node = self.interface.getNode('^local')
+        node.localConfig.device.node_info_broadcast_secs = interval_s
+        node.writeConfig("device")
 
     def getChannel(self):
         node = self.interface.getNode('^local')

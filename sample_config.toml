@@ -9,6 +9,7 @@ port = "/dev/ttyUSB0"                 # serial connection
 emergency_channel_number = 1
 emergency_channel_name = "EMERGENCY"
 time_between_messages_s = 30
+node_info_broadcast_secs = 4294967295  # NodeInfo-ismétlési időköz másodpercben; minimum 3600, maximum 4294967295
 connect_max_retries = 10              # csatlakozási próbák száma feladás előtt; 0 = végtelen (folyamatos módhoz), >0 ajánlott egyszeri/cron módban
 want_ack = true                       # true: wantAck jelzővel küld, megvárja a nyugtát, és nyugta híján újraküld (lásd ack_timeout_s / ack_max_retries); false: "tűzd ki és felejtsd el"
 ack_timeout_s = 30                    # ennyi másodpercig várja a nyugtát (ACK/NAK) egy küldés után
@@ -47,5 +48,4 @@ include_link = true                    # true: a hír oldalának linkje (rövid�
 url_shortener = "is.gd"                # ingyenes, kulcs nélküli rövidítő: "is.gd" / "v.gd" / "tinyurl"; "" = rövidítés nélkül, a teljes linket küldi
 cache_max_entries = 500               # ha a cache ennél több bejegyzésre nő, lefut a takarítás (0 = kikapcsolva)
 cache_clear_time_days = 30             # takarításkor az ennél régebbi bejegyzések törlődnek
-
 
