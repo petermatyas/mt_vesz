@@ -72,6 +72,8 @@ rss_url = "https://www.katasztrofavedelem.hu/10466/RSS_VESZ"
 rss_read_time_min = 10                # hírlekérés gyakorisága (perc)
 postfix_text = "hírforrás: BM OKF"    # minden hír végére fűzött szöveg
 max_message_length = 200              # a kiküldött üzenet max. hossza karakterben (0 = nincs korlát)
+include_link = true                   # a hír oldalának rövidített linkje bekerül az üzenetbe
+url_shortener = "is.gd"               # "is.gd" / "v.gd" / "tinyurl"; "" = rövidítés nélkül
 ```
 
 ### `[general]` szekció
@@ -123,6 +125,8 @@ meg (`mt_vesz.log.1`, `.2` …), így a naplók nem nőnek korlátlanul.
 | `rss_read_time_min` | Milyen gyakran (percben) kérdezze le újra a hírfolyamot. |
 | `postfix_text` | Minden kiküldött hír végéhez hozzáfűzött szöveg. |
 | `max_message_length` | A kiküldött üzenet maximális hossza karakterben. `0` = nincs korlát. Ha a teljes üzenet (cím + `postfix_text`) hosszabb a korlátnál, a cím végét levágja, `...`-t tesz a helyére, majd a `postfix_text` következik – így az üzenet hossza pontosan a beállított korlát lesz. A `postfix_text` mindig az üzenet végén marad. |
+| `include_link` | `true` esetén a hír weboldalának (az RSS `<link>` mezője, „Esemény részletei” oldal) linkje is bekerül az üzenetbe: `cím link postfix_text`. Hosszkorlát túllépésekor csak a cím rövidül, a link és a `postfix_text` megmarad. Alapértelmezés: `false`. |
+| `url_shortener` | A linket lerövidítő ingyenes, regisztráció nélküli szolgáltatás: `is.gd` (alapértelmezés), `v.gd` vagy `tinyurl`. `""` = rövidítés nélkül, a teljes link kerül az üzenetbe. Ha a rövidítés nem sikerül (pl. nincs internet), a teljes linkkel megy ki a hír. |
 | `cache_max_entries` | Ha a `cache.json` ennél több bejegyzésre nő, új hír érkezésekor automatikusan lefut a takarítás. `0` = kikapcsolva (korlátlan növekedés). |
 | `cache_clear_time_days` | Takarításkor az ennél régebbi (napban) bejegyzések törlődnek a cache-ből. |
 

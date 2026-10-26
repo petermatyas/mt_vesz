@@ -5,9 +5,20 @@ import logging
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 import os
+import urllib.error
+import urllib.parse
+import urllib.request
 
 
 logger = logging.getLogger(__name__)
+
+# Ingyenes, regisztráció/API-kulcs nélküli URL-rövidítők. A válasz egyszerű
+# szöveg: maga a rövid URL.
+URL_SHORTENERS = {
+    "is.gd": "https://is.gd/create.php?format=simple&url={url}",
+    "v.gd": "https://v.gd/create.php?format=simple&url={url}",
+    "tinyurl": "https://tinyurl.com/api-create.php?url={url}",
+}
 
 
 
@@ -17,7 +28,9 @@ class BMFeeds():
                  postfix_text="hírforrás: BM OKF",
                  max_message_length=0,
                  max_cache_entries=0,
-                 clear_time_s=30 * 24 * 3600):
+                 clear_time_s=30 * 24 * 3600,
+                 include_link=False,
+                 url_shortener="is.gd"):
         self.url = rss_url
         self.cache_file = cache_file
         self.postfix_text = postfix_text
@@ -27,6 +40,14 @@ class BMFeeds():
         # (0 = kikapcsolva). A clear_time_s adja meg, milyen régi elemek törlődnek.
         self.max_cache_entries = max_cache_entries
         self.clear_time_s = clear_time_s
+        # Ha igaz, a hír oldalának (az RSS <link> mezője) linkje is bekerül az
+        # üzenetbe, a url_shortener szolgáltatással lerövidítve ("" = rövidítés nélkül).
+        self.include_link = include_link
+        if url_shortener and url_shortener not in URL_SHORTENERS:
+            logger.warning("Ismeretlen url_shortener (%r) – rövidítés nélkül küldjük a linket. "
+                           "Lehetséges értékek: %s", url_shortener, ", ".join(URL_SHORTENERS))
+            url_shortener = ""
+        self.url_shortener = url_shortener
         self.cache = self._load_cache()
 
     def _load_cache(self):
@@ -143,26 +164,51 @@ class BMFeeds():
             self._save_cache()
             logger.info("Takarítás kész: %d elem törölve.", original_len - len(self.cache))
 
-    def _build_message(self, title):
-        """Összeállítja a kiküldendő üzenetet: a cím és a végére fűzött
-        ``postfix_text``. A postfix mindig az üzenet végén marad.
+    def _shorten_url(self, url):
+        """Lerövidíti az URL-t a beállított szolgáltatással.
+
+        Hiba esetén (hálózat, időtúllépés, értelmezhetetlen válasz) nem állunk
+        meg: figyelmeztetünk, és az eredeti, hosszú URL-t adjuk vissza."""
+        if not self.url_shortener:
+            return url
+        api = URL_SHORTENERS[self.url_shortener].format(url=urllib.parse.quote(url, safe=""))
+        try:
+            req = urllib.request.Request(api, headers={"User-Agent": "mt_vesz"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                short = resp.read().decode("utf-8").strip()
+        except (urllib.error.URLError, OSError, UnicodeDecodeError) as e:
+            logger.warning("URL rövidítése sikertelen (%s): %s – a teljes linket küldjük.",
+                           self.url_shortener, e)
+            return url
+        if not short.startswith("http"):
+            # Az is.gd/v.gd hibát is 200-as válasszal, szövegként adhat vissza.
+            logger.warning("URL rövidítése sikertelen (%s): %r – a teljes linket küldjük.",
+                           self.url_shortener, short[:100])
+            return url
+        return short
+
+    def _build_message(self, title, link=""):
+        """Összeállítja a kiküldendő üzenetet: a cím, (ha van) a link, és a
+        végére fűzött ``postfix_text``. A link és a postfix mindig az üzenet
+        végén marad.
 
         Ha van hosszkorlát (``max_message_length`` > 0) és a teljes üzenet
         hosszabb annál, a cím végét levágjuk, három pontot ("...") teszünk a
-        helyére, majd a postfix következik – úgy, hogy az üzenet hossza pontosan
-        a beállított korlát legyen."""
-        full = f"{title} {self.postfix_text}"
+        helyére, majd a link és a postfix következik – úgy, hogy az üzenet
+        hossza pontosan a beállított korlát legyen."""
+        tail = " ".join(p for p in (link, self.postfix_text) if p)
+        full = f"{title} {tail}"
         if not self.max_message_length or len(full) <= self.max_message_length:
             return full
 
-        # "...<szóköz>postfix" – ez mindenképp az üzenet végén marad.
-        suffix = f"... {self.postfix_text}"
+        # "...<szóköz>link postfix" – ez mindenképp az üzenet végén marad.
+        suffix = f"... {tail}"
         keep = self.max_message_length - len(suffix)
         if keep <= 0:
             # A korlát még a postfixet (+ "...") sem fedi le – ilyenkor nem tudunk
             # a korláton belül maradni, de a postfixet nem dobjuk el.
             logger.warning(
-                "A max_message_length (%d) túl kicsi a postfix_text-hez – "
+                "A max_message_length (%d) túl kicsi a linkhez és a postfix_text-hez – "
                 "az üzenet hosszabb lesz a korlátnál.", self.max_message_length)
             return suffix
         return f"{title[:keep]}{suffix}"
@@ -174,7 +220,12 @@ class BMFeeds():
             title = i.get('title', '')  # cím nélküli bejegyzés ne dobjon AttributeError-t
             if not title:
                 continue  # cím nélkül nincs értelmes üzenet, kihagyjuk
-            news.append(self._build_message(title))
+            link = i.get('link', '')
+            if self.include_link and link:
+                link = self._shorten_url(link)
+            else:
+                link = ""
+            news.append(self._build_message(title, link))
         return news
 
 if __name__ == "__main__":

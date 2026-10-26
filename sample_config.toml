@@ -43,7 +43,9 @@ rss_url = "https://www.katasztrofavedelem.hu/10466/RSS_VESZ"
 rss_read_time_min = 10                 # csak use_scheduler = true esetén számít
 postfix_text = "hírforrás: BM OKF"
 max_message_length = 200               # a kiküldött üzenet max. hossza karakterben (0 = nincs korlát); túllépéskor a cím végét levágja, "..."-t tesz, és a postfix_text kerül a végére
-cache_max_entries = 500                # ha a cache ennél több bejegyzésre nő, lefut a takarítás (0 = kikapcsolva)
+include_link = true                    # true: a hír oldalának linkje (rövidítve) bekerül az üzenetbe a cím és a postfix_text közé
+url_shortener = "is.gd"                # ingyenes, kulcs nélküli rövidítő: "is.gd" / "v.gd" / "tinyurl"; "" = rövidítés nélkül, a teljes linket küldi
+cache_max_entries = 500               # ha a cache ennél több bejegyzésre nő, lefut a takarítás (0 = kikapcsolva)
 cache_clear_time_days = 30             # takarításkor az ennél régebbi bejegyzések törlődnek
 
 

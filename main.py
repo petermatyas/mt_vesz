@@ -115,6 +115,8 @@ if __name__ == "__main__":
         max_message_length=cfg("vesz.max_message_length", 0),
         max_cache_entries=cfg("vesz.cache_max_entries", 0),
         clear_time_s=cfg("vesz.cache_clear_time_days", 30) * 24 * 3600,
+        include_link=cfg("vesz.include_link", False),
+        url_shortener=cfg("vesz.url_shortener", "is.gd"),
     )
 
 
