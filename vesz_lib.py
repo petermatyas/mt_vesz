@@ -21,6 +21,11 @@ URL_SHORTENERS = {
 }
 
 
+def _utf8_len(text):
+    """A szöveg hossza UTF-8 bájtban (így számol a Meshtastic is)."""
+    return len(text.encode("utf-8"))
+
+
 
 class BMFeeds():
     def __init__(self, rss_url="https://www.katasztrofavedelem.hu/10466/RSS_VESZ",
@@ -34,7 +39,7 @@ class BMFeeds():
         self.url = rss_url
         self.cache_file = cache_file
         self.postfix_text = postfix_text
-        # A kiküldött üzenet maximális hossza karakterben (0 = nincs korlát).
+        # A kiküldött üzenet maximális hossza UTF-8 bájtban (0 = nincs korlát).
         self.max_message_length = max_message_length
         # Ha a cache ennél több bejegyzésre nő, lefut az idő-alapú takarítás
         # (0 = kikapcsolva). A clear_time_s adja meg, milyen régi elemek törlődnek.
@@ -192,18 +197,21 @@ class BMFeeds():
         végére fűzött ``postfix_text``. A link és a postfix mindig az üzenet
         végén marad.
 
-        Ha van hosszkorlát (``max_message_length`` > 0) és a teljes üzenet
-        hosszabb annál, a cím végét levágjuk, három pontot ("...") teszünk a
-        helyére, majd a link és a postfix következik – úgy, hogy az üzenet
-        hossza pontosan a beállított korlát legyen."""
+        A hosszkorlát (``max_message_length``) UTF-8 bájtban értendő, mert a
+        Meshtastic is bájtban korlátozza a csomagot (egy ékezetes betű 2 bájt).
+        Ha van korlát (> 0) és a teljes üzenet hosszabb annál, a cím végét
+        levágjuk, három pontot ("...") teszünk a helyére, majd a link és a
+        postfix következik – úgy, hogy az üzenet legfeljebb a beállított korlát
+        hosszú legyen (karaktert nem vágunk ketté, ezért 1-3 bájttal rövidebb
+        is lehet)."""
         tail = " ".join(p for p in (link, self.postfix_text) if p)
         full = f"{title} {tail}"
-        if not self.max_message_length or len(full) <= self.max_message_length:
+        if not self.max_message_length or _utf8_len(full) <= self.max_message_length:
             return full
 
         # "...<szóköz>link postfix" – ez mindenképp az üzenet végén marad.
         suffix = f"... {tail}"
-        keep = self.max_message_length - len(suffix)
+        keep = self.max_message_length - _utf8_len(suffix)
         if keep <= 0:
             # A korlát még a postfixet (+ "...") sem fedi le – ilyenkor nem tudunk
             # a korláton belül maradni, de a postfixet nem dobjuk el.
@@ -211,7 +219,10 @@ class BMFeeds():
                 "A max_message_length (%d) túl kicsi a linkhez és a postfix_text-hez – "
                 "az üzenet hosszabb lesz a korlátnál.", self.max_message_length)
             return suffix
-        return f"{title[:keep]}{suffix}"
+        # A bájtos vágás egy többbájtos karakter közepére eshet – a csonka
+        # karaktert az errors="ignore" eldobja.
+        head = title.encode("utf-8")[:keep].decode("utf-8", errors="ignore")
+        return f"{head}{suffix}"
 
     def getNews(self):
         rawNews = self.download() or []
