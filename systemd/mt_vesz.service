@@ -1,0 +1,25 @@
+# mt_vesz – folyamatos futtatás systemd szolgáltatásként (use_scheduler = true esetén).
+#
+# Telepítés (a "pi" felhasználót és az útvonalakat igazítsd a saját rendszeredhez):
+#   sudo cp systemd/mt_vesz.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now mt_vesz
+#
+# Egyszeri módhoz (use_scheduler = false) ne ezt használd, hanem crontabot.
+
+[Unit]
+Description=mt_vesz - VESZ hírek kiküldése Meshtastic hálózatra
+# A meshtasticd (RAK HAT) és a hálózat (RSS letöltés) után induljon.
+Wants=network-online.target meshtasticd.service
+After=network-online.target meshtasticd.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/mt_vesz
+ExecStart=/home/pi/mt_vesz/venv/bin/python main.py
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

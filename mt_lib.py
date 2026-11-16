@@ -6,7 +6,7 @@ import time
 import meshtastic
 import meshtastic.serial_interface, meshtastic.tcp_interface
 
-from meshtastic.protobuf import channel_pb2, portnums_pb2
+from meshtastic.protobuf import channel_pb2, config_pb2, portnums_pb2
 
 from pubsub import pub
 
@@ -15,6 +15,19 @@ logger = logging.getLogger(__name__)
 
 MIN_NODE_INFO_BROADCAST_SECS = 3600
 MAX_NODE_INFO_BROADCAST_SECS = 0xFFFFFFFF
+
+# A Meshtastic API alapértelmezett TCP portja (node-ok és meshtasticd).
+DEFAULT_TCP_PORT = 4403
+
+
+def lora_region_value(region_name):
+    """A régió nevéből (pl. "EU_868") a protobuf enum értéke; hibás névre ValueError."""
+    region_enum = config_pb2.Config.LoRaConfig.RegionCode
+    try:
+        return region_enum.Value(str(region_name).strip().upper())
+    except ValueError:
+        names = ", ".join(n for n in region_enum.keys() if n != "UNSET")
+        raise ValueError(f"Ismeretlen LoRa régió: {region_name!r}. Lehetséges értékek: {names}")
 
 
 class _AckWaiter:
@@ -210,6 +223,20 @@ class MtHandler():
         node.localConfig.device.node_info_broadcast_secs = interval_s
         node.writeConfig("device")
 
+    def setLoraRegion(self, region_name):
+        """A LoRa régió beállítása (pl. "EU_868"). Csak akkor ír a node-ra, ha
+        az eltér a jelenlegitől. Visszaadja, hogy történt-e írás.
+
+        Régióváltáskor a node újraindulhat (meshtasticd esetén a szolgáltatás),
+        ezért ezt érdemes utolsó lépésként hívni."""
+        value = lora_region_value(region_name)
+        node = self.interface.getNode('^local')
+        if node.localConfig.lora.region == value:
+            return False
+        node.localConfig.lora.region = value
+        node.writeConfig("lora")
+        return True
+
     def getChannel(self):
         node = self.interface.getNode('^local')
         channels = node.channels
@@ -365,18 +392,25 @@ class MtSerialHandler(MtHandler):
         self._connected = False
 
 class MtTcpHandler(MtHandler):
-    def __init__(self, host='192.168.0.182', **kwargs):
+    def __init__(self, host='192.168.0.182', tcp_port=DEFAULT_TCP_PORT, **kwargs):
         super().__init__(**kwargs)
         self.host = host
+        self.tcp_port = int(tcp_port)
         self.interface = None
 
     def _create_interface(self):
+        kwargs = {}
+        # Csak eltérő port esetén adjuk át, így régebbi könyvtárverzióval is működik.
+        if self.tcp_port != DEFAULT_TCP_PORT:
+            kwargs["portNumber"] = self.tcp_port
         try:
-            return meshtastic.tcp_interface.TCPInterface(hostname=self.host, timeout=10)
+            return meshtastic.tcp_interface.TCPInterface(hostname=self.host, timeout=10, **kwargs)
         except Exception as e:
             raise RuntimeError(f"nem hozható létre TCP interface: {e}") from e
 
     def _target_desc(self):
+        if self.tcp_port != DEFAULT_TCP_PORT:
+            return f"Meshtastic device at {self.host}:{self.tcp_port}"
         return f"Meshtastic device at {self.host}"
 
     def disconnect(self):
@@ -389,6 +423,29 @@ class MtTcpHandler(MtHandler):
             print(f"Disconnected from {self._target_desc()}")
         self.interface = None
         self._connected = False
+
+
+class MtRakHatHandler(MtTcpHandler):
+    """RAK6421 WisMesh Pi HAT (RAK13300 / RAK13302 LoRa modul) Raspberry Pi-n.
+
+    A rádiót SPI buszon a Pi-n futó ``meshtasticd`` szolgáltatás kezeli, és a
+    Meshtastic API-t TCP-n nyújtja (alapból 127.0.0.1:4403) – a kapcsolat tehát
+    ugyanaz, mint egy hálózati node esetén, csak a gépen belül."""
+
+    def __init__(self, host='127.0.0.1', tcp_port=DEFAULT_TCP_PORT, **kwargs):
+        super().__init__(host=host, tcp_port=tcp_port, **kwargs)
+
+    def _create_interface(self):
+        try:
+            return super()._create_interface()
+        except Exception as e:
+            raise RuntimeError(
+                f"{e} – fut a meshtasticd szolgáltatás? "
+                "(ellenőrzés: systemctl status meshtasticd, journalctl -u meshtasticd)"
+            ) from e
+
+    def _target_desc(self):
+        return f"RAK6421 Pi HAT (meshtasticd @ {self.host}:{self.tcp_port})"
 
 
 if __name__ == "__main__":

@@ -1,43 +1,18 @@
 import logging
+import sys
 import time
-import tomllib
 
 import log_setup
 import mt_lib
+import rak_hat
 import vesz_lib
+# A config betöltése az app_config modulban történik; a cfg / config / CONFIG_FILE
+# nevek innen is elérhetők maradnak (a heartbeat.py, setup_channel.py,
+# read_messages.py a main-ből importálja őket).
+from app_config import CONFIG_FILE, cfg, config  # noqa: F401
 
 
 logger = logging.getLogger(__name__)
-
-CONFIG_FILE = "config.toml"
-
-try:
-    with open(CONFIG_FILE, "rb") as f:
-        config = tomllib.load(f)
-except FileNotFoundError:
-    raise SystemExit(f"Hiba: a konfigurációs fájl nem található: {CONFIG_FILE}")
-except tomllib.TOMLDecodeError as e:
-    raise SystemExit(f"Hiba: a konfigurációs fájl ({CONFIG_FILE}) hibás formátumú: {e}")
-
-
-_MISSING = object()
-
-
-def cfg(path, default=_MISSING):
-    """Beolvas egy értéket a configból 'szekcio.kulcs' útvonal alapján.
-
-    Ha a kulcs hiányzik és nincs megadva ``default``, érthető hibaüzenettel
-    kilép a program (a nyers KeyError helyett)."""
-    node = config
-    for part in path.split("."):
-        if not isinstance(node, dict) or part not in node:
-            if default is not _MISSING:
-                return default
-            raise SystemExit(
-                f"Hiba: hiányzó vagy olvashatatlan beállítás a {CONFIG_FILE} fájlban: '{path}'"
-            )
-        node = node[part]
-    return node
 
 
 # A naplózást a config betöltése után, minden más előtt beállítjuk, hogy a
@@ -49,18 +24,49 @@ log_setup.setup_logging(
 )
 
 
+def check_rak_hat_setup():
+    """rak_hat módban ellenőrzi a [rak_hat] beállításokat és a meshtasticd
+    rádió-presetjét. Hibás config esetén kilép; eltérés esetén csak figyelmeztet
+    (a csatlakozást nem akadályozza meg)."""
+    try:
+        filename = rak_hat.preset_filename(
+            lora_module=cfg("rak_hat.lora_module", "auto"),
+            slot=cfg("rak_hat.slot", 1),
+            preset_file=cfg("rak_hat.preset_file", ""),
+        )
+    except rak_hat.RakHatConfigError as e:
+        raise SystemExit(f"Hiba a {CONFIG_FILE} [rak_hat] szekciójában: {e}")
+
+    if not cfg("rak_hat.check_preset", True) or not sys.platform.startswith("linux"):
+        return
+    base_dir = cfg("rak_hat.meshtasticd_dir", rak_hat.DEFAULT_MESHTASTICD_DIR)
+    for problem in rak_hat.check_preset(filename, base_dir):
+        logger.warning("RAK HAT: %s Javítás: sudo venv/bin/python setup_rak_hat.py", problem)
+
+
 def build_handler():
-    """A configból létrehozza a megfelelő Meshtastic handlert (TCP / serial).
+    """A configból létrehozza a megfelelő Meshtastic handlert (TCP / serial / rak_hat).
 
     A csatlakozás még nem történik meg – azt a hívó ``mt.connect()``-tel indítja."""
     connect_mode = cfg("meshtastic.connect_mode").lower()
     # 0 (vagy hiányzó) => végtelen újrapróbálkozás; >0 => ennyi próba után feladja.
     max_retries = cfg("meshtastic.connect_max_retries", 0) or None
     if connect_mode == "tcp":
-        return mt_lib.MtTcpHandler(host=cfg("meshtastic.host"), max_retries=max_retries)
+        return mt_lib.MtTcpHandler(
+            host=cfg("meshtastic.host"),
+            tcp_port=cfg("meshtastic.tcp_port", mt_lib.DEFAULT_TCP_PORT),
+            max_retries=max_retries,
+        )
     elif connect_mode == "serial":
         return mt_lib.MtSerialHandler(port=cfg("meshtastic.port"), max_retries=max_retries)
-    raise SystemExit("Hiba: érvénytelen connect_mode a config fájlban (TCP / serial).")
+    elif connect_mode == "rak_hat":
+        check_rak_hat_setup()
+        return mt_lib.MtRakHatHandler(
+            host=cfg("rak_hat.host", rak_hat.DEFAULT_HOST),
+            tcp_port=cfg("rak_hat.tcp_port", rak_hat.DEFAULT_TCP_PORT),
+            max_retries=max_retries,
+        )
+    raise SystemExit("Hiba: érvénytelen connect_mode a config fájlban (TCP / serial / rak_hat).")
 
 
 def init():

@@ -1,4 +1,9 @@
-"""A vészhelyzeti csatorna és NodeInfo-időköz beállítása a node-on.
+"""A vészhelyzeti csatorna, a NodeInfo-időköz és (opcionálisan) a LoRa régió
+beállítása a node-on.
+
+A LoRa régiót csak akkor írja, ha a ``meshtastic.lora_region`` meg van adva és
+eltér a node jelenlegi értékétől. Új (pl. meshtasticd-s, RAK HAT-os) node-on a
+régió gyárilag nincs beállítva, és amíg nincs, a rádió nem ad.
 
 A rutin hírküldés (main.py) NEM állítja a csatornát, hogy ne írjon feleslegesen
 a node flash-ébe minden futáskor (különösen cron-módban). Ezt a scriptet elég
@@ -14,7 +19,7 @@ Használat:
 import logging
 
 from main import cfg, build_handler
-from mt_lib import MAX_NODE_INFO_BROADCAST_SECS, MIN_NODE_INFO_BROADCAST_SECS
+from mt_lib import MAX_NODE_INFO_BROADCAST_SECS, MIN_NODE_INFO_BROADCAST_SECS, lora_region_value
 
 
 logger = logging.getLogger(__name__)
@@ -34,6 +39,13 @@ def main():
             "Hiba: a meshtastic.node_info_broadcast_secs értéke 3600 és "
             f"{MAX_NODE_INFO_BROADCAST_SECS} közötti egész szám legyen."
         )
+
+    lora_region = cfg("meshtastic.lora_region", "")
+    if lora_region:
+        try:
+            lora_region_value(lora_region)  # a csatlakozás előtt ellenőrizzük
+        except ValueError as e:
+            raise SystemExit(f"Hiba: meshtastic.lora_region: {e}")
 
     mt = build_handler()
 
@@ -59,9 +71,15 @@ def main():
             "Vészhelyzeti csatorna beállítva; NodeInfo küldési időköz: %d másodperc.",
             node_info_interval_s,
         )
+        # A régió írása az utolsó lépés: régióváltáskor a node újraindulhat.
+        if lora_region:
+            if mt.setLoraRegion(lora_region):
+                logger.info("LoRa régió beállítva: %s (a node újraindulhat).", lora_region.upper())
+            else:
+                logger.info("LoRa régió már megfelelő: %s.", lora_region.upper())
     except Exception as e:
-        logger.error("Csatorna vagy NodeInfo beállítása sikertelen: %s", e)
-        raise SystemExit(f"Hiba: csatorna vagy NodeInfo beállítása sikertelen: {e}") from e
+        logger.error("Csatorna, NodeInfo vagy régió beállítása sikertelen: %s", e)
+        raise SystemExit(f"Hiba: csatorna, NodeInfo vagy régió beállítása sikertelen: {e}") from e
     finally:
         try:
             mt.disconnect()

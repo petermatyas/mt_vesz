@@ -3,9 +3,11 @@ use_scheduler = false                  # true: beépített időzítővel fut fol
 
 
 [meshtastic]
-connect_mode = "TCP"                  # TCP / serial
-host = "192.168.0.182"                # TCP connection
-port = "/dev/ttyUSB0"                 # serial connection
+connect_mode = "TCP"                  # "TCP": hálózati node | "serial": USB-s node | "rak_hat": Raspberry Pi + RAK6421 HAT (meshtasticd), lásd [rak_hat]
+host = "192.168.0.182"                # TCP módban: a node IP-címe / hostneve
+tcp_port = 4403                       # TCP módban: a node API portja (Meshtastic alapértelmezés: 4403)
+port = "/dev/ttyUSB0"                 # serial módban: a soros port (Windows: pl. "COM3"); a list_ports.py kilistázza
+lora_region = ""                      # pl. "EU_868": a setup_channel.py beállítja a node-on, ha eltér; "" = nem nyúl hozzá. Új (RAK HAT-os) node-on KÖTELEZŐ, különben a rádió nem ad!
 emergency_channel_number = 1
 emergency_channel_name = "EMERGENCY"
 time_between_messages_s = 30
@@ -16,6 +18,18 @@ ack_timeout_s = 30                    # ennyi másodpercig várja a nyugtát (AC
 ack_max_retries = 2                   # nyugta híján ennyiszer küldi újra (0 = nincs újraküldés, csak naplózás); összesen max. 1 + ack_max_retries küldés
                                       # FIGYELEM: az újraküldés új packet ID-t kap, amit a vevők NEM deduplikálnak – ha csak a nyugta veszett el, a hallgatóknál duplikátum jelenhet meg. Tartsd alacsonyan!
 hop_limit = 3                         # az üzenet hányszor mehet tovább más node-okon keresztül (Meshtastic alapértelmezés: 3)
+
+
+[rak_hat]
+# Csak connect_mode = "rak_hat" esetén számít. A RAK6421 WisMesh Pi HAT LoRa
+# modulját a Pi-n futó meshtasticd kezeli SPI-n; a program TCP-n csatlakozik hozzá.
+lora_module = "RAK13300"              # "auto": a meshtasticd a HAT EEPROM-ja alapján ismeri fel | "RAK13300" | "RAK13302" (1 W-os)
+slot = 1                              # melyik IO slotban van a modul: 1 / 2 (auto módban nem számít)
+preset_file = ""                      # opcionális: az /etc/meshtasticd/available.d-beli preset fájlneve, ha eltér a szokásostól (felülírja a lora_module/slot párost)
+host = "127.0.0.1"                    # a meshtasticd címe (ugyanazon a gépen: 127.0.0.1)
+tcp_port = 4403                       # a meshtasticd API portja
+meshtasticd_dir = "/etc/meshtasticd"  # a meshtasticd konfigurációs könyvtára
+check_preset = true                   # true: induláskor ellenőrzi, hogy a meshtasticd presetje egyezik-e a fenti beállítással (eltérésnél figyelmeztet)
 
 
 [heartbeat]
