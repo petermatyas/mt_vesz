@@ -4,3 +4,5 @@ __pycache__/*
 cache.json
 config.toml
 mt_vesz.log*
+*.txt
+auto_update.log
